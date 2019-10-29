@@ -1,17 +1,20 @@
 #!/usr/bin/env perl
 use Mojo::Base -strict;
-use Net::Google::Drive::Simple::Mirror;
-#use Net::Google::Drive;
-
+use FindBin;
 use Mojo::File 'path';
 use Data::Printer;
 use Data::Dumper;
+
+use lib "$FindBin::Bin/../lib";
+use Net::Google::Drive::Simple::LocalSync;
+#use Net::Google::Drive;
+
 
 my $home = path($ENV{HOME});
 # requires a ~/.google-drive.yml file containing an access token,
 # see documentation of Net::Google::Drive::Simple
 
-my $google_docs = Net::Google::Drive::Simple::Mirror->new(
+my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
     remote_root => '/',
     local_root  => $home->child('googledrive')->to_string,
     export_format => ['opendocument','html'],

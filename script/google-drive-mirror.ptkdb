@@ -1,0 +1,16 @@
+$files = {
+           '_</home/t527081/git/googledrive/script/../lib/Net/Google/Drive/Simple/LocalSync.pm' => [
+                                                                                                     {
+                                                                                                       'text' => '	my $did = $self->{remote_dirs}->{$locfol->to_string};
+',
+                                                                                                       'expr' => undef,
+                                                                                                       'fname' => '/home/t527081/git/googledrive/script/../lib/Net/Google/Drive/Simple/LocalSync.pm',
+                                                                                                       'line' => '97',
+                                                                                                       'value' => '1',
+                                                                                                       'type' => 'user'
+                                                                                                     }
+                                                                                                   ]
+         };
+$expr_list = [];
+$eval_saved_text = undef;
+$main_win_geometry = '800x600+-4+782';
