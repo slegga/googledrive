@@ -1,5 +1,5 @@
 package Net::Google::Drive::Simple::LocalSync;
-use Mojo::Base -strict;
+use Mojo::Base -base;
 use Net::Google::Drive::Simple;
 use DateTime::Format::RFC3339;
 use DateTime;
@@ -12,80 +12,92 @@ use Data::Dumper;
 
 our $VERSION = '0.54';
 
-sub new {
-    my ( $class, %options ) = @_;
+# sub new {
+#     my ( $class, %options ) = @_;
+#
+#     croak "Local folder '$options{local_root}' not found"
+#         unless -d $options{local_root};
+#     $options{local_root} .= '/'
+#         unless $options{local_root} =~ m{/$};
+#
+#     my $gd = Net::Google::Drive::Simple->new();
+#     $options{remote_root} = '/' . $options{remote_root}
+#         unless $options{remote_root} =~ m{^/};
+#
+#     # XXX To support slashes in folder names in remote_root, I would have
+#     # to implement a different remote_root lookup mechanism here:
+#     my ( undef, $remote_root_ID ) = $gd->children( $options{remote_root} );
+#
+#     my $self = {
+#         remote_root_ID          => $remote_root_ID,
+# #        export_format           => [ 'opendocument', 'html' ],
+# #        sync_condition          => \&_should_sync,
+# #        force                   => undef,                        # XXX move this to mirror()
+#         net_google_drive_simple => $gd,
+#         local_files => undef,
+#         remote_dirs => {},
+#
+#         %options
+#     };
+#
+#     bless $self, $class;
+# }
 
-    croak "Local folder '$options{local_root}' not found"
-        unless -d $options{local_root};
-    $options{local_root} .= '/'
-        unless $options{local_root} =~ m{/$};
-
-    my $gd = Net::Google::Drive::Simple->new();
-    $options{remote_root} = '/' . $options{remote_root}
-        unless $options{remote_root} =~ m{^/};
-
-    # XXX To support slashes in folder names in remote_root, I would have
-    # to implement a different remote_root lookup mechanism here:
-    my ( undef, $remote_root_ID ) = $gd->children( $options{remote_root} );
-
-    my $self = {
-        remote_root_ID          => $remote_root_ID,
-        export_format           => [ 'opendocument', 'html' ],
-        sync_condition          => \&_should_sync,
-        force                   => undef,                        # XXX move this to mirror()
-        net_google_drive_simple => $gd,
-        local_files => undef,
-        remote_dirs => {},
-
-        %options
-    };
-
-    bless $self, $class;
-}
+has remote_root_ID =>sub {my $self = shift;
+    my $gd=$self->net_google_drive_simple;
+    my ( undef, $remote_root_ID ) = $gd->children( $self->remote_root );
+    return $remote_root_ID};
+has net_google_drive_simple => sub {Net::Google::Drive::Simple->new()};
+has remote_root => sub{path('/')};
+has 'local_root';
+has 'local_files';
+has 'remote_dirs';
 
 sub mirror {
     my $self = shift;
 
     # get list of localfiles:
-	my %lc = map { $_ => -d $_ } map {decode('UTF-8', $_->to_string)} path($self->{local_root})->list_tree({dont_use_nlink=>1,dir=>1})->each;
-	$self->{remote_dirs}->{$self->{local_root} } = $self->{remote_root_ID};
+	my %lc = map { $_ => -d $_ } map {decode('UTF-8', $_->to_string)} path($self->local_root)->list_tree({dont_use_nlink=>1,dir=>1})->each;
+    my $remote_dirs = $self->remote_dirs;
+    $remote_dirs->{$self->local_root } = $self->remote_root_ID;
 
 #	say "localfile $_" for keys %lc;
+    $self->remote_dirs($remote_dirs);
+     $self->local_files( \%lc);
 
-     $self->{local_files} = \%lc;
+    #may add to remove_dirs
+    $self->_process_folder( $self->remote_root_ID, $self->local_root );
 
-
-    _process_folder( $self, $self->{remote_root_ID}, $self->{local_root} );
+    #update remote_dirs;
+    $remote_dirs = $self->remote_dirs;
 
 	# uploads new files
-   	for my $local_file (keys %{$self->{local_files}}) {
-		next if $local_file =~/\/Camera Uploads\//; #do not replicate camera
-		next if $local_file =~ /\/googledrive\/googledrive/; #do not replicate camera
-		my $locfol = path($local_file)->dirname;
+   	for my $lf (keys %{$self->local_files}) {
+        my $local_file = path($lf);
+		next if $local_file->to_string =~/\/Camera Uploads\//; #do not replicate camera
+		next if $local_file->to_string =~ /\/googledrive\/googledrive/; #do not replicate camera
+        next if $local_file->to_string =~ /\/googledrive[^\/]/; #do not replicate camera
+		my $locfol = $local_file->dirname;
 		my $local_dir = $locfol->to_string;
-		$local_dir .='/' if $local_dir !~/\/$/; # secure last /
+		#$local_dir .='/' if $local_dir !~/\/$/; # secure last /
 
-		my $did = $self->{remote_dirs}->{$local_dir};
+		my $did = $remote_dirs->{$local_dir};
 		$did = $self->_make_path($locfol) if (!$did);
 		die if ! $did;
 
-		say "push new file $local_file". $did . ' # '.  path($local_file)->dirname->to_string;
-		die "No local_file" if ! $local_file;
+#		say "push new file "$local_file->basename. $did . ' # '.  $local_file->dirname->to_string;
+		die "No local_file" if ! "$local_file";
 		if (! $did) {
 			warn "No directory id";
-			die Dumper $self->{remote_dirs};
+            $remote_dirs = $self->remote_dirs;
+			die Dumper $remote_dirs;
 		}
 
 
-		if ($self->{local_files}->{$local_file}) { #check if dir
-		#creating dir is done in _make_path
-#			my $basename = path($local_file)->basename;
-#			say "Create new folder on Google Drive $local_file do create $basename in $locfol";
-#			my $id = $self->{net_google_drive_simple}->folder_create( $basename,  $did);
-#			$self->{net_google_drive_simple}->{remote_dirs}->{$local_file} = $id;
+		if ($self->local_files->{"$local_file"}) { #check if dir
 		} else {
-			say "Create new file on Google Drive $local_file in dir $local_file";
-			$self->{net_google_drive_simple}->file_upload( $local_file,  $did);
+			say "Create new file on Google Drive ".$local_file->basename ." in dir ".$local_file->dirname;
+			$self->net_google_drive_simple->file_upload( $local_file->to_string,  $did);
 		}
    	}
 
@@ -94,92 +106,103 @@ sub mirror {
 # _make_path - recursive make path on google drive for a file
 sub _make_path {
     my ( $self, $path_mf ) = @_;
+    my $remote_dirs = $self->remote_dirs;
 	my $full_path = $path_mf->to_string;
-   	$full_path .='/' if $full_path !~/\/$/; # secure last /
-    $self->{recursive_counter}++;
+   	#$full_path .='/' if $full_path !~/\/$/; # secure last /
+    $self->recursive_counter($self->recursive_counter+1);
     say $full_path;
-    die "looping $path_mf" if $self->{recursive_counter}>8;
-    die"Stop loop at $path_mf $self->{recursive_counter} \n".Dumper $self->{remote_dirs} if $full_path eq '/' || $full_path eq $self->{local_root};
+    die "looping $path_mf" if $self->recursive_counter>8;
+    die"Stop loop at $path_mf $self->recursive_counter \n".join("\n", sort keys %$remote_dirs) if $full_path eq '/' || $full_path eq $self->local_root->to_string;
 	my $locfol = $path_mf->dirname;
-	my $lfs = $locfol->to_string;
-	$lfs .='/' if $lfs !~/\/$/; # secure last /
-	my $did = $self->{remote_dirs}->{$lfs};
+	#my $lfs = $locfol->to_string;
+	#$lfs .='/' if $lfs !~/\/$/; # secure last /
+	my $did = $remote_dirs->{$locfol->to_string};
 	if (!$did) {
-			die "$lfs does not exists in ". Dumper  $self->{remote_dirs};
+#			die "$lfs does not exists in ". Dumper  $remote_dirs;
 			$did = $self->_make_path($locfol);
 	}
 	my $basename = $path_mf->basename;
 	say "Create new folder on Google Drive $basename in $locfol $did";
-	$did = $self->{net_google_drive_simple}->folder_create( $basename,  $did);
-	$self->{net_google_drive_simple}->{remote_dirs}->{$full_path} = $did;
+	$did = $self->net_google_drive_simple->folder_create( $basename,  $did);
+	$remote_dirs->{$full_path} = $did;
     $self->{recursive_counter}--;
+    $self->remote_dirs($remote_dirs);
 	return $did;
 }
 
 sub _process_folder {
-    my ( $self, $folder_id, $path ) = @_;
-    my $gd       = $self->{net_google_drive_simple};
+    my ( $self, $folder_id, $path_mf ) = @_;
+    return if $path_mf->to_string =~ /\/googledrive\/googledrive/; #do not replicate camera
+    my $gd       = $self->net_google_drive_simple;
     my $children = $gd->children_by_folder_id($folder_id);
-	return if $path =~ /\/googledrive\/googledrive/; #do not replicate camera
+    my $remote_dirs = $self->remote_dirs;
+    my $local_files = $self->local_files;
 
     for my $child (@$children) {
         my $file_name = $child->title();
         $file_name =~ s{/}{_};
-        my $local_file = $path . $file_name;
-        delete $self->{local_files}->{$local_file};
+        my $local_file = $path_mf->child($file_name);
+        delete $local_files->{$local_file};
 
         # a google document: export to preferred format
         next if $child->can("exportLinks");
 
         # pdfs and the like get downloaded directly
         if ( $child->can("downloadUrl") ) {
-            my $s = $self->{sync_condition}->( $self, $child, $local_file );
+            die "NO LOCAL FILE" if ! "$local_file";
+            my $s = $self->_should_sync( $child, $local_file );
             if ( $s eq 'down' ) {
-                print "$path$file_name ..downloading\n";
-                $gd->download( $child, $local_file );
+                print "$local_file ..downloading\n";
+                $gd->download( $child, "$local_file" );
             } elsif ( $s eq 'up' ) {
-                print "$path$file_name ..uploading\n";
-                $gd->file_upload( $local_file, $folder_id );
+                print "$local_file ..uploading\n";
+                $gd->file_upload( "$local_file", $folder_id );
             } elsif ( $s eq 'ok' ) {
-                print "$path$file_name ..ok\n";
+                print "$local_file ..ok\n";
             } else {
                 ...;
             }
             next;
         }
         # if we reach this, we could not "fetch" the file. A dir, then..
-        my $dir = $path . $file_name;
-        $dir .='/' if $dir !~/\/$/; # secure last /
-        $self->{remote_dirs}->{$dir} = $child->id();
-        mkdir( $dir ) unless -d $dir;
+        my $dir = $path_mf->child($file_name);
+        # "$dir" .='/' if "$dir" !~/\/$/; # secure last /
+        $remote_dirs->{"$dir"} = $child->id();
+        mkdir( "$dir" ) unless -d "$dir";
 
-        _process_folder( $self, $child->id(), $dir . '/' );
+        # write hashes to object
+        $self->remote_dirs($remote_dirs);
+        $self->local_files($local_files);
+        _process_folder( $self, $child->id(), $dir );
+        $remote_dirs = $self->remote_dirs();
+        $local_files = $self->local_files();
 
     }
-
+    $self->local_files($local_files);
 }
 
 sub _should_sync {
     my ( $self, $remote_file, $local_file ) = @_;
 
     die "Not implemented" if $self->{force};
-    if ( $remote_file->labels->{trashed} ) {
-        return 'delete_local';
-    }
+    die "NO LOCAL FILE" if ! $local_file;
+#    if ( $remote_file->labels->{trashed} ) {
+#        return 'delete_local';
+#    }
 
     my $date_time_parser = DateTime::Format::RFC3339->new();
 
-    my $local_epoch  = ( stat($local_file) )[9];
+    my $local_epoch  = ( stat("$local_file") )[9];
     my $remote_epoch = $date_time_parser->parse_datetime( $remote_file->modifiedDate() )->epoch();
 	return 'ok' if -d $local_file;
 	my $rffs = $remote_file->fileSize();
-	my $lffs = -s $local_file;
+	my $lffs = -s "$local_file";
 	return 'down' if ! defined $lffs;
-    if ( $remote_file->fileSize() == -s $local_file && $remote_file->md5Checksum() eq md5_hex(path($local_file)->slurp)  ) {
+    if ( $remote_file->fileSize() == -s "$local_file" && $remote_file->md5Checksum() eq md5_hex(path($local_file)->slurp)  ) {
         return 'ok';
     }
 
-	warn sprintf "%s    %s:%s    %s:%s", $local_file, int( $remote_epoch / 10 ), int( $local_epoch / 10 ) , $remote_file->fileSize() , -s $local_file;
+	warn sprintf "%s    %s:%s    %s:%s", $local_file, int( $remote_epoch / 10 ), int( $local_epoch / 10 ) , $remote_file->fileSize() , -s "$local_file";
     if ( -f $local_file and $remote_epoch < $local_epoch ) {
         return 'up';
     } else {
