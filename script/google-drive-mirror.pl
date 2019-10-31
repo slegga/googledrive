@@ -1,4 +1,5 @@
 #!/usr/bin/env perl
+use lib '.';
 use Mojo::Base -strict;
 use FindBin;
 use Mojo::File 'path';

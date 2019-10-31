@@ -4,12 +4,13 @@ create table if not exists files_state (
   loc_pathfile text,
   loc_mod_epoch integer,
   loc_size integer,
-  loc_md5hex  text,
+  loc_md5_hex  text,
+  loc_tmp_md5_hex text,
   rem_file_id text,
   rem_parent_id text,
   rem_filename text,
   rem_mod_epoch integer,
-  rem_md5hex text,
+  rem_md5_hex text,
   act_epoch text,
   act_action text
 );

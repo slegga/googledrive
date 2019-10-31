@@ -5,59 +5,56 @@ use DateTime::Format::RFC3339;
 use DateTime;
 use Carp;
 use Mojo::File 'path';
+use Mojo::Home;
 use Digest::MD5 qw /md5_hex/;
 use Encode qw /decode encode/;
 use utf8;
 use Data::Dumper;
+use Mojo::SQLite;
+
+use FindBin;
+use lib "FindBin::Bin/../lib";
+use Mojo::File::Role::UTF8;
+
 
 our $VERSION = '0.54';
-
-# sub new {
-#     my ( $class, %options ) = @_;
-#
-#     croak "Local folder '$options{local_root}' not found"
-#         unless -d $options{local_root};
-#     $options{local_root} .= '/'
-#         unless $options{local_root} =~ m{/$};
-#
-#     my $gd = Net::Google::Drive::Simple->new();
-#     $options{remote_root} = '/' . $options{remote_root}
-#         unless $options{remote_root} =~ m{^/};
-#
-#     # XXX To support slashes in folder names in remote_root, I would have
-#     # to implement a different remote_root lookup mechanism here:
-#     my ( undef, $remote_root_ID ) = $gd->children( $options{remote_root} );
-#
-#     my $self = {
-#         remote_root_ID          => $remote_root_ID,
-# #        export_format           => [ 'opendocument', 'html' ],
-# #        sync_condition          => \&_should_sync,
-# #        force                   => undef,                        # XXX move this to mirror()
-#         net_google_drive_simple => $gd,
-#         local_files => undef,
-#         remote_dirs => {},
-#
-#         %options
-#     };
-#
-#     bless $self, $class;
-# }
-
 has remote_root_ID =>sub {my $self = shift;
     my $gd=$self->net_google_drive_simple;
     my ( undef, $remote_root_ID ) = $gd->children( $self->remote_root );
     return $remote_root_ID};
 has net_google_drive_simple => sub {Net::Google::Drive::Simple->new()};
 has remote_root => sub{path('/')};
+has dbfile => $ENV{HOME}.'/.googledrive/files_state.db';
+has sqlite => sub {
+	my $self = shift;
+	if ( -f $self->dbfile) {
+		return Mojo::SQLite->new()->from_filename($self->dbfile);
+	} else {
+		my $path = path($self->dbfile)->dirname;
+		if (!-d "$path" ) {
+			$path->make_path;
+		}
+		return Mojo::SQLite->new("file:".$self->dbfile);
+	#	die "COULD NOT CREATE FILE ".$self->dbfile if ! -f $self->dbfile;
+	}
+
+};
+has db => sub {shift->sqlite->db};
+
 has 'local_root';
 has 'local_files';
 has 'remote_dirs';
+has recursive_counter => 0;
 
 sub mirror {
     my $self = shift;
 
+    #update database if new version
+    my $path = Mojo::Home->new->child('migrations', 'files_state.sql')->with_roles('Mojo::File::Role::UTF8');
+	$self->sqlite->migrations->from_file($path->to_string_utf8)->migrate;
+
     # get list of localfiles:
-	my %lc = map { $_ => -d $_ } map {decode('UTF-8', $_->to_string)} path($self->local_root)->list_tree({dont_use_nlink=>1,dir=>1})->each;
+	my %lc = map { $_ => -d $_ } map {decode('UTF-8', $_->with_roles('+UTF8')->to_string_utf8)} path($self->local_root)->list_tree({dont_use_nlink=>1,dir=>1})->each;
     my $remote_dirs = $self->remote_dirs;
     $remote_dirs->{$self->local_root } = $self->remote_root_ID;
 
@@ -73,12 +70,15 @@ sub mirror {
 
 	# uploads new files
    	for my $lf (keys %{$self->local_files}) {
-        my $local_file = path($lf);
-		next if $local_file->to_string =~/\/Camera Uploads\//; #do not replicate camera
-		next if $local_file->to_string =~ /\/googledrive\/googledrive/; #do not replicate camera
-        next if $local_file->to_string =~ /\/googledrive[^\/]/; #do not replicate camera
+        my $local_file = path($lf)->with_roles('Mojo::File::Role::UTF8');
+        my $lf_name = $local_file->to_string_utf8;
+		next if $lf_name =~/\/Camera Uploads\//; #do not replicate camera
+		next if $lf_name =~ /\/googledrive\/googledrive/; #do not replicate camera
+        next if $lf_name =~ /\/googledrive[^\/]/; #do not replicate camera
 		my $locfol = $local_file->dirname;
-		my $local_dir = $locfol->to_string;
+        
+        #$locfol = $locfol->with_roles('Mojo::File::Role::UTF8'); This did not work on 8.25
+		my $local_dir = Encode::decode('UTF-8', $locfol->to_string);
 		#$local_dir .='/' if $local_dir !~/\/$/; # secure last /
 
 		my $did = $remote_dirs->{$local_dir};
@@ -86,7 +86,7 @@ sub mirror {
 		die if ! $did;
 
 #		say "push new file "$local_file->basename. $did . ' # '.  $local_file->dirname->to_string;
-		die "No local_file" if ! "$local_file";
+		die "No local_file" if ! $lf_name;
 		if (! $did) {
 			warn "No directory id";
             $remote_dirs = $self->remote_dirs;
@@ -94,10 +94,10 @@ sub mirror {
 		}
 
 
-		if ($self->local_files->{"$local_file"}) { #check if dir
+		if ($self->local_files->{$lf_name}) { #check if dir
 		} else {
-			say "Create new file on Google Drive ".$local_file->basename ." in dir ".$local_file->dirname;
-			$self->net_google_drive_simple->file_upload( $local_file->to_string,  $did);
+			say "Create new file on Google Drive ".Encode::decode('UTF8',$local_file->basename) ." in dir ".Encode::decode('UTF8', $local_file->dirname);
+			$self->net_google_drive_simple->file_upload( $local_file->to_string_utf8,  $did);
 		}
    	}
 
@@ -107,16 +107,16 @@ sub mirror {
 sub _make_path {
     my ( $self, $path_mf ) = @_;
     my $remote_dirs = $self->remote_dirs;
-	my $full_path = $path_mf->to_string;
+	my $full_path = $path_mf->to_string_utf8;
    	#$full_path .='/' if $full_path !~/\/$/; # secure last /
     $self->recursive_counter($self->recursive_counter+1);
     say $full_path;
     die "looping $path_mf" if $self->recursive_counter>8;
-    die"Stop loop at $path_mf $self->recursive_counter \n".join("\n", sort keys %$remote_dirs) if $full_path eq '/' || $full_path eq $self->local_root->to_string;
+    die"Stop loop at $path_mf $self->recursive_counter \n".join("\n", sort keys %$remote_dirs) if $full_path eq '/' || $full_path eq $self->local_root->to_string_utf8;
 	my $locfol = $path_mf->dirname;
 	#my $lfs = $locfol->to_string;
 	#$lfs .='/' if $lfs !~/\/$/; # secure last /
-	my $did = $remote_dirs->{$locfol->to_string};
+	my $did = $remote_dirs->{$locfol->to_string_utf8};
 	if (!$did) {
 #			die "$lfs does not exists in ". Dumper  $remote_dirs;
 			$did = $self->_make_path($locfol);
@@ -154,9 +154,14 @@ sub _process_folder {
             if ( $s eq 'down' ) {
                 print "$local_file ..downloading\n";
                 $gd->download( $child, "$local_file" );
+                my ($local_size, $local_mod) = (stat("$local_file"))[7,9];
+                $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex)
+                	VALUES (?,?,?,?)',"$local_file",$local_size,$local_mod,$child->md5Checksum);
             } elsif ( $s eq 'up' ) {
                 print "$local_file ..uploading\n";
                 $gd->file_upload( "$local_file", $folder_id );
+#                $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex)
+#                  	VALUES (?,?,?,?)',"$local_file",$local_size,$local_mod,$child->md5Checksum);
             } elsif ( $s eq 'ok' ) {
                 print "$local_file ..ok\n";
             } else {
@@ -192,18 +197,56 @@ sub _should_sync {
 
     my $date_time_parser = DateTime::Format::RFC3339->new();
 
-    my $local_epoch  = ( stat("$local_file") )[9];
-    my $remote_epoch = $date_time_parser->parse_datetime( $remote_file->modifiedDate() )->epoch();
+    my ($loc_size,$loc_mod)  = ( stat("$local_file") )[7,9];
+    my $rem_mod = $date_time_parser->parse_datetime( $remote_file->modifiedDate() )->epoch();
 	return 'ok' if -d $local_file;
 	my $rffs = $remote_file->fileSize();
-	my $lffs = -s "$local_file";
-	return 'down' if ! defined $lffs;
-    if ( $remote_file->fileSize() == -s "$local_file" && $remote_file->md5Checksum() eq md5_hex(path($local_file)->slurp)  ) {
-        return 'ok';
+	return 'down' if ! defined $loc_mod;
+	my $filedata = $self->db->query('select * from files_state where loc_pathfile = ?',"$local_file")->hash;
+
+	my $loc_md5_hex;
+
+    if (! keys %$filedata) {
+        # file exists in remote and local but not registered in sqlite cache
+
+        for my $r( $self->db->query('select * from files_state where loc_pathfile like ?',substr("$local_file",0, 4).'%')->hashes->each ) {
+            next if !$r;
+            say $r if ref $r ne 'HASH';
+            say join('#', grep {$_} values %$r) ;
+        }
+        # die "No data cached data for $local_file";
+        say "insert cache $local_file";
+        my $loc_md5_hex = md5_hex("$local_file");
+        $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex
+            , rem_file_id,   rem_filename, rem_mod_epoch, rem_md5_hex, act_epoch, act_action)
+            VALUES(?,?,?,?,?, ?,?,?,?,?)'
+            ,"$local_file", $loc_size, $loc_mod, $loc_md5_hex, $remote_file->id(), $remote_file->title(), $rem_mod , $remote_file->md5Checksum(), time, 'registered'
+        );
+        $filedata = {loc_pathfile=>"$local_file" , loc_size=>$loc_size, loc_mod_epoch=>$loc_mod, loc_md5_hex=>$loc_md5_hex,
+            , $remote_file->id(), rem_filename =>$remote_file->title(), rem_mod_epoch=>$rem_mod, rem_md5_hex=>$remote_file->md5Checksum() ,
+             act_epoch=>time, 'registered'};
+    }
+    if (! $loc_mod) {
+        die "File does not exists $local_file";
+        # $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex)',?,?,?,?);
     }
 
-	warn sprintf "%s    %s:%s    %s:%s", $local_file, int( $remote_epoch / 10 ), int( $local_epoch / 10 ) , $remote_file->fileSize() , -s "$local_file";
-    if ( -f $local_file and $remote_epoch < $local_epoch ) {
+    # File not changed on disk
+    if ( $loc_size == $filedata->{loc_size} && $loc_mod == $filedata->{loc_mod_epoch} ) {
+    	$loc_md5_hex = $filedata->{loc_md5_hex};
+    } else {
+        say "calc md5 for changed file ". $local_file;
+    	$loc_md5_hex = md5_hex(path($local_file)->slurp);
+    	$self->db->query('update files_state set loc_tmp_md5_hex = ? where loc_pathfile = ?',$loc_md5_hex, "$local_file");
+    }
+
+	# filediffer up or down?
+    if ($loc_md5_hex eq $remote_file->md5Checksum()) {
+ 		return 'ok';
+    }
+
+	#warn sprintf "%s    %s:%s    %s:%s", $local_file, int( $rem_mod / 10 ), int( $loc_mod / 10 ) , $remote_file->fileSize() , -s "$local_file";
+    if ( -f $local_file and $rem_mod < $loc_mod ) {
         return 'up';
     } else {
         return 'down';
@@ -216,15 +259,15 @@ __END__
 
 =head1 NAME
 
-Net::Google::Drive::Simple::Mirror - Locally mirror a Google Drive folder structure
+Net::Google::Drive::Simple::LocalSync - Locally mirror a Google Drive folder structure
 
 =head1 SYNOPSIS
 
-    use Net::Google::Drive::Simple::Mirror;
+    use Net::Google::Drive::Simple::LocalSync;
 
     # requires a ~/.google-drive.yml file containing an access token,
     # see documentation of Net::Google::Drive::Simple
-    my $google_docs = Net::Google::Drive::Simple::Mirror->new(
+    my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
         remote_root => '/folder/on/google/docs',
         local_root  => 'local/folder',
         export_format => ['opendocument', 'html'],
@@ -235,7 +278,7 @@ Net::Google::Drive::Simple::Mirror - Locally mirror a Google Drive folder struct
 
 =head1 DESCRIPTION
 
-Net::Google::Drive::Simple::Mirror allows you to locally mirror a folder structure from Google Drive.
+Net::Google::Drive::Simple::LocalSync allows you to locally mirror a folder structure from Google Drive.
 
 =head2 GETTING STARTED
 
@@ -295,7 +338,7 @@ download_condition: reference to a sub that takes the remote file name and the l
 
 download_condition can be used to change the behaviour of mirror(). I.e. do not download but list al remote files and what they became locally:
 
-    my $google_docs = Net::Google::Drive::Simple::Mirror->new(
+    my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
         remote_root   => 'Mirror/Test/Folder',
         local_root    => 'test_data_mirror',
         export_format => ['opendocument','html'],
@@ -353,7 +396,7 @@ With local_root 'Google-Docs-Mirror' this locally becomes:
     Google-Docs-Mirror
                     `--Letters A_B
 
-(Net::Google::Drive::Simple::Mirror uses folder ID's as soon as it has found the remote_root and does not depend on folder file names.)
+(Net::Google::Drive::Simple::LocalSync uses folder ID's as soon as it has found the remote_root and does not depend on folder file names.)
 
 =head1 AUTHOR
 
@@ -361,7 +404,7 @@ Altered by Stein Hammer C<steihamm@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This module is a fork of the CPAN module Net::Google::Drive::Mirror 0.053
+This module is a fork of the CPAN module Net::Google::Drive::LocalSync 0.053
 
 Copyright (C) 2014 by :m)
 
