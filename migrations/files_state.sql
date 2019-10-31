@@ -15,7 +15,7 @@ create table if not exists files_state (
 );
 
 CREATE UNIQUE INDEX loc_pathfile
-ON files_state(loc_pathname);
+ON files_state(loc_pathfile);
 
 -- 1 down
-drop table if exists posts;
+drop table if exists files_state;
