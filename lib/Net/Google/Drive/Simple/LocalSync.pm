@@ -107,7 +107,12 @@ sub mirror {
             while ($try) {
                 eval {
                     if (-f $lf_name) {
-                        $self->net_google_drive_simple->file_upload( $lf_name, $did ) ;
+                        my $cache = $self->db->query('select * from files_state where loc_pathfile = ?',$lf_name );
+                        if (! defined $cache || !keys %$cache ||! exists $cache->{rem_file_id} || ! $cache->{rem_file_id}) {
+                            $self->net_google_drive_simple->file_upload( $lf_name, $did );
+                        } else {
+                            $self->net_google_drive_simple->file_upload( $lf_name, $did, $cache->{rem_file_id} );
+                        }
                     } else {
                         say "File does not exists locally $lf_name ignore file. Probably encoding errors";
                     }
@@ -164,7 +169,8 @@ sub _process_folder_full {
     my $local_files = $self->local_files;
 
     for my $child (@$children) {
-        my $file_name = decode('UTF-8',$child->originalFilename||$child->title); #latin1 or utf8 ?
+        my $f = $child->can('originalFilename') ? $child->originalFilename : $child->title;
+        my $file_name = decode('UTF-8', $f); #latin1 or utf8 ?
         # $file_name =~ s{/}{_};
         my $local_file = $path_mf->child($file_name)->with_roles('Mojo::File::Role::UTF8');
         my $loc_file_name = $local_file->to_string_utf8;
@@ -295,7 +301,7 @@ sub _utf8ifing {
     $malformed_utf8 =~ s/[\x{9}\x{A}\x{D}\x{20}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/_/;
     #$malformed_utf8=~s/Ã.+//;
 
-    $return = decode('UTF-8', $malformed_utf8, Encode::FB_DEFAULT);
+    my $return = decode('UTF-8', $malformed_utf8, Encode::FB_DEFAULT);
     $return =~ s/\x{E000}-\x{FFFD}/_/g;
     return $return;
 }
@@ -335,7 +341,21 @@ sub _process_delta {
     # from remote to local
     for my $rem_object (@$rem_chg_objects) {
         say "Remote".$rem_object->title;
-        # if ($self->_should_sync())
+        my $lf_name = $self->_construct_path($rem_object);
+        my $local_file = path($lf_name)->with_roles('+UTF8');
+        my $sync = $self->_should_sync($rem_object, $local_file);
+        $self->handle_sync($rem_object, $local_file, $sync);
+    }
+
+    # from local to remote
+    for my $key (keys %lc) {
+        next if ! exists $lc{$key}{sync};
+        next if ! $lc{$key}{sync};
+        my ($folder_id,$file_id) = $self->_get_remoteids_from_local_filename($lc);
+
+
+
+
     }
 
 }
