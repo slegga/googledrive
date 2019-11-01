@@ -18,5 +18,12 @@ create table if not exists files_state (
 CREATE UNIQUE INDEX loc_pathfile
 ON files_state(loc_pathfile);
 
+create table if not exists replication_state_int (
+  id    integer primary key autoincrement,
+  key text,
+  value integer,
+);
+
+
 -- 1 down
 drop table if exists files_state;
