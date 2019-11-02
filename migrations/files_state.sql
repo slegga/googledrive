@@ -21,9 +21,10 @@ ON files_state(loc_pathfile);
 create table if not exists replication_state_int (
   id    integer primary key autoincrement,
   key text,
-  value integer,
+  value integer
 );
 
 
 -- 1 down
 drop table if exists files_state;
+drop table if exists replication_state_int;

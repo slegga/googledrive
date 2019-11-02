@@ -12,6 +12,7 @@ use utf8;
 use Data::Dumper;
 use Mojo::SQLite;
 use Encode qw(decode encode);
+use File::Copy;
 
 use FindBin;
 use lib "FindBin::Bin/../lib";
@@ -68,7 +69,8 @@ sub mirror {
 
     say "BEFORE _process_folder " . $self->_timeused;
     #may add to remove_dirs
-    $self->_process_folder_full( $self->remote_root_ID, $self->local_root );
+#    $self->_process_folder_full( $self->remote_root_ID, $self->local_root );
+    $self->_process_delta;
 
     say "AFTER _process_folder " . $self->_timeused;
 
@@ -181,31 +183,7 @@ sub _process_folder_full {
 
         # pdfs and the like get downloaded directly
         if ( $child->can("downloadUrl") ) {
-            die "NO LOCAL FILE" if ! $loc_file_name;
-            my $s = $self->_should_sync( $child, $local_file );
-            if ( $s eq 'down' ) {
-                print "$loc_file_name ..downloading\n";
-                $gd->download( $child, $loc_file_name );
-                my ($local_size, $local_mod) = (stat($loc_file_name))[7,9];
-                $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex)
-                	VALUES (?,?,?,?)',$loc_file_name,$local_size,$local_mod,$child->md5Checksum);
-            } elsif ( $s eq 'up' ) {
-                print "$loc_file_name ..uploading\n";
-                my $try = 1;
-                while ($try) {
-                    eval {
-                        $gd->file_upload( $loc_file_name, $folder_id );
-                        $try=0;
-                        1;
-                    } or warn $@;
-                }
-#                $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex)
-#                  	VALUES (?,?,?,?)',$loc_file_name ,$local_size,$local_mod,$child->md5Checksum);
-            } elsif ( $s eq 'ok' ) {
-                print "$loc_file_name ..ok\n";
-            } else {
-                ...;
-            }
+            $self->handle_sync($child, $local_file);
             next;
         }
         # if we reach this, we could not "fetch" the file. A dir, then..
@@ -308,6 +286,70 @@ sub _utf8ifing {
 
 ######################################################################################
 ######################################################################################
+#                                   COOMMON COE
+######################################################################################
+######################################################################################
+sub _handle_sync{
+    my ($self,$remote_file, $local_file, $folder_id) = @_;
+    my $loc_file_name = $local_file->to_string_utf8;
+    die "NO LOCAL FILE" if ! $loc_file_name;
+    my $s = $self->_should_sync( $remote_file, $local_file );
+    my ($local_size, $local_mod) = (stat($loc_file_name))[7,9];
+    if ( $s eq 'down' ) {
+        print "$loc_file_name ..downloading\n";
+        
+        #atomic download
+        my $tmpfile = Mojo::File::tempfile;
+        $self->google_drive_simple->download( $remote_file, $tmpfile );
+        move($tmpfile, $loc_file_name);
+        
+        $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex,
+        rem_file_id, rem_parent_id, rem_md5_hex
+        act_epoch,act_action)
+            VALUES (?,?,?,?)',$loc_file_name,$local_size,$local_mod,$remote_file->md5Checksum,
+            $remote_file->file_id,$remote_file->parents->[0],$remote_file->md5Checksum,
+            time,'download');
+    } elsif ( $s eq 'up' ) {
+        print "$loc_file_name ..uploading\n";
+        my $try = 1;
+        my $md5_hex = md5_hex($loc_file_name);
+        if (! $folder_id) {
+            $folder_id = $self->_get_folder_id_by_localname($loc_file_name);
+        }
+        while ($try) {
+            eval {
+                $self->google_drive_simple->file_upload( $loc_file_name, $folder_id );
+                $try=0;
+                $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex,
+                rem_file_id, rem_parent_id, rem_md5_hex
+                act_epoch,act_action)
+                    VALUES (?,?,?,?)',$loc_file_name,$local_size,$local_mod,$md5_hex,
+                    $remote_file->file_id,$folder_id,$md5_hex,
+                    time,'upload');
+                
+                1;
+            } or warn $@;
+        }
+#                $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex)
+#                  	VALUES (?,?,?,?)',$loc_file_name ,$local_size,$local_mod,$md5_hex);
+    } elsif ( $s eq 'ok' ) {
+        print "$loc_file_name ..ok\n";
+    } else {
+        ...;
+    }
+
+}
+
+sub _get_folder_id_by_localname {
+    my ($self, $loc_file_name) = @_;
+    # search for file name if one take that parent?
+    # or start from root and work until you hit a file?
+    # or look up in sqlite the chached parent_id?
+    ...;
+    
+}
+######################################################################################
+######################################################################################
 #                                  DELTA CODE
 ######################################################################################
 ######################################################################################
@@ -319,12 +361,17 @@ sub _process_delta {
     my $local_root = $self->local_root;
     my $dt = DateTime::Format::RFC3339->new();
     my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { $_->with_roles('+UTF8')->to_string_utf8 } path( "$local_root" )->list_tree({dont_use_nlink=>1,dir=>1})->each;
-    my $cache = $self->db->query('select * from files_state')->hashes->to_array;
+    my $tmpc = $self->db->query('select * from files_state')->hashes->to_array;
+    my %cache;
+    for my $r(@$tmpc) {
+        my $lfn =delete $r->{loc_file_name};
+        $cache{$lfn} = $r;
+    }
     for my $lc_pathfile (keys %lc) {
-        if (! exists $cache->{$lc_pathfile} || ! $cache->{$lc_pathfile} ) {
+        if (!%cache || ! exists $cache{$lc_pathfile} || ! $cache{$lc_pathfile} ) {
             $lc{$lc_pathfile}{sync} = 1;
         }
-        elsif ($lc{$lc_pathfile}{size} != $cache->{$lc_pathfile}{loc_size} || $lc{$lc_pathfile}{loc_mod_epoch} != $cache->{$lc_pathfile}{loc_mod_epoch} ) {
+        elsif ($lc{$lc_pathfile}{size} != $cache{$lc_pathfile}{loc_size} || $lc{$lc_pathfile}{loc_mod_epoch} != $cache{$lc_pathfile}{loc_mod_epoch} ) {
             $lc{$lc_pathfile}{sync} = 1;
         }
         else {
@@ -351,7 +398,7 @@ sub _process_delta {
     for my $key (keys %lc) {
         next if ! exists $lc{$key}{sync};
         next if ! $lc{$key}{sync};
-        my ($folder_id,$file_id) = $self->_get_remoteids_from_local_filename($lc);
+        my ($folder_id,$file_id) = $self->_get_remoteids_from_local_filename($key);
 
 
 
