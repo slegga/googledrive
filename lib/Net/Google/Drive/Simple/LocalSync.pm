@@ -360,6 +360,7 @@ sub _process_delta {
     my $self = shift;
     my $local_root = $self->local_root;
     my $dt = DateTime::Format::RFC3339->new();
+    my $new_delta_sync_epoch = time;
     my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { $_->with_roles('+UTF8')->to_string_utf8 } path( "$local_root" )->list_tree({dont_use_nlink=>1,dir=>1})->each;
     my $tmpc = $self->db->query('select * from files_state')->hashes->to_array;
     my %cache;
@@ -404,7 +405,7 @@ sub _process_delta {
 
 
     }
-
+    $self->db->query('replace into replication_state_int(VALUE) (?) where key="delta_sync_epoch"',$new_delta_sync_epoch);
 }
 
 
