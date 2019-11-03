@@ -74,6 +74,8 @@ sub mirror {
 
     say "AFTER _process_folder " . $self->_timeused;
 
+    $self->db->query('replace into replication_state_int(VALUE) (?) where key="delta_sync_epoch"',$new_delta_sync_epoch);
+
     #update remote_dirs;
     $remote_dirs = $self->remote_dirs;
 
@@ -127,6 +129,7 @@ sub mirror {
 		}
    	}
     say "FINISH SCRIPT " . $self->_timeused;
+    $self->db->query('replace into replication_state_int(VALUE) (?) where key="full_sync_epoch"',$new_delta_sync_epoch);
 
 }
 
@@ -297,12 +300,12 @@ sub _handle_sync{
     my ($local_size, $local_mod) = (stat($loc_file_name))[7,9];
     if ( $s eq 'down' ) {
         print "$loc_file_name ..downloading\n";
-        
+
         #atomic download
         my $tmpfile = Mojo::File::tempfile;
         $self->google_drive_simple->download( $remote_file, $tmpfile );
         move($tmpfile, $loc_file_name);
-        
+
         $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex,
         rem_file_id, rem_parent_id, rem_md5_hex
         act_epoch,act_action)
@@ -313,9 +316,19 @@ sub _handle_sync{
         print "$loc_file_name ..uploading\n";
         my $try = 1;
         my $md5_hex = md5_hex($loc_file_name);
+		if (!$folder_id && $remote_file->can(parents)) {
+			my $p = $remote_file->parents;
+			if (@$p >1) {
+				die "MANY PARENTS DO NOT WHICH TO CHOOSE"
+			} elsif (@$p == 1) {
+				$folder_id = $p->[0];
+			}
+		}
+
         if (! $folder_id) {
-            $folder_id = $self->_get_folder_id_by_localname($loc_file_name);
+            $folder_id = $self->_get_folder_id_by($loc_file_name);
         }
+
         while ($try) {
             eval {
                 $self->google_drive_simple->file_upload( $loc_file_name, $folder_id );
@@ -326,7 +339,7 @@ sub _handle_sync{
                     VALUES (?,?,?,?)',$loc_file_name,$local_size,$local_mod,$md5_hex,
                     $remote_file->file_id,$folder_id,$md5_hex,
                     time,'upload');
-                
+
                 1;
             } or warn $@;
         }
@@ -341,12 +354,18 @@ sub _handle_sync{
 }
 
 sub _get_folder_id_by_localname {
-    my ($self, $loc_file_name) = @_;
-    # search for file name if one take that parent?
-    # or start from root and work until you hit a file?
-    # or look up in sqlite the chached parent_id?
-    ...;
-    
+    my ($self, $local_file) = @_;
+    # look up in sqlite the cached parent_id?
+    my $row = $self->db->query('select * from files_state where loc_pathfile = ?',$local_file->to_string_utf8)->hash;
+    if ($row && exists $row->{rem_parent_id} && $row->{rem_parent_id})
+    return $row->{rem_parent_id};
+
+    # start from root and work until you hit last dir?
+    my $folder_id='root';
+    for my $i(@{$self->local_root} .. ($#$local_file-1)) {
+    	$folder_id=$self->net_google_drive_simple->->children_by_folder_id($folder_id,'title="'.$local_file->[$i].'"')->id;
+    }
+	return $folder_id;
 }
 ######################################################################################
 ######################################################################################

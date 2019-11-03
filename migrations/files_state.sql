@@ -24,6 +24,9 @@ create table if not exists replication_state_int (
   value integer
 );
 
+CREATE UNIQUE INDEX key_idx
+ON replication_state_int(key);
+
 
 -- 1 down
 drop table if exists files_state;
