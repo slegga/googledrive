@@ -400,22 +400,32 @@ sub _process_delta {
     my $local_root = $self->local_root;
     my $dt = DateTime::Format::RFC3339->new();
     my $new_delta_sync_epoch = time;
-    my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { $_->with_roles('+UTF8')->to_string_utf8 } grep {defined $_} path( "$local_root" )->list_tree({dont_use_nlink=>1,dir=>1})->each;
+    my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { $_->with_roles('+UTF8')->to_string_utf8 } grep {defined $_} path( "$local_root" )->list_tree({dont_use_nlink=>1})->each;
     my $tmpc = $self->db->query('select * from files_state')->hashes->to_array;
-    my %cache;
+    my %cache=();
     for my $r(@$tmpc) {
         die Dumper $r if !exists $r->{loc_pathfile};
         my $lfn = delete $r->{loc_pathfile};
         $cache{$lfn} = $r;
     }
     for my $lc_pathfile (keys %lc) {
+        # if (! exists $cache{$lc_pathfile}{size} ) {
+        #     my $rem_object = $self->_get_remote_object_by_local_pathfile($lc_pathfile);
+        #     say $lc_pathfile;
+        #     warn Dumper $lc{$lc_pathfile};
+        #     die Dumper $cache{$lc_pathfile};
+        #     ...;
+        # }
+
+        say "$lc_pathfile $lc{$lc_pathfile}{size} != $cache{$lc_pathfile}{loc_size} || $lc{$lc_pathfile}{mod} != ($cache{$lc_pathfile}{loc_mod_epoch}";
+        say Dumper $cache{$lc_pathfile} if ! exists $cache{$lc_pathfile}{loc_size} || ! defined $cache{$lc_pathfile}{loc_size};
         if (! defined $lc{$lc_pathfile}{size}) {
             die $lc_pathfile . Dumper $lc{$lc_pathfile};
         }
-        if (!%cache || ! exists $cache{$lc_pathfile} || ! $cache{$lc_pathfile} ) {
+        if (!keys %cache || ! exists $cache{$lc_pathfile} || ! $cache{$lc_pathfile} ) {
             $lc{$lc_pathfile}{sync} = 1;
         }
-        elsif ($lc{$lc_pathfile}{size} != $cache{$lc_pathfile}{loc_size} || $lc{$lc_pathfile}{loc_mod_epoch} != $cache{$lc_pathfile}{loc_mod_epoch} ) {
+        elsif ($lc{$lc_pathfile}{size} != ($cache{$lc_pathfile}{loc_size}//0) || $lc{$lc_pathfile}{mod} != ($cache{$lc_pathfile}{loc_mod_epoch}//0) ) {
             $lc{$lc_pathfile}{sync} = 1;
         }
         else {
@@ -429,7 +439,7 @@ sub _process_delta {
     } else {
         die "Shall not be runned delta updates if not set delta_sync_epoch";
     }
-    my $rem_chg_objects = $gd->search(sprintf("modifiedDate > '%s'", $dt->format_datetime(DateTime->from_epoch($cache_last_delta_sync_epoch))));
+    my $rem_chg_objects = $gd->search({},{page=>0},sprintf("modifiedDate > '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$cache_last_delta_sync_epoch))));
     print Dumper $rem_chg_objects;
 
     # process changes
@@ -456,6 +466,34 @@ sub _process_delta {
     $self->db->query('replace into replication_state_int(key,value) VALUES(?, ?)',"delta_sync_epoch",$new_delta_sync_epoch);
 }
 
+sub _construct_path{
+    my $self = shift;
+    my $rem_object = shift;
+    die if ! defined $rem_object;
+    my @r;
+    my $i =0;
+    while (1) {
+        $i++;
+        die if ! defined $rem_object;
+        say $i.join @r;
+        unshift @r, $rem_object->title;
+        my $ps = $rem_object->parents;
+        my $parent_id;
+        if (ref $ps eq 'ARRAY') {
+            $parent_id = $ps->[0]->{id};
+        } else {
+            die Dumper$ps;
+        }
+
+
+
+        last if $parent_id eq 'root';
+        die "Endless loop" if $i>20;
+        $ros = $self->net_google_drive_simple->search({},{page=>0},{id=>$parent_id});
+        $rem_object->$ros->[0];
+    }
+    return Mojo::File->new($self->local_root, @r);
+}
 
 
 
