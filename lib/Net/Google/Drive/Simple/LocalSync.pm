@@ -74,7 +74,7 @@ sub mirror {
 
     say "AFTER _process_folder " . $self->_timeused;
 
-    $self->db->query('replace into replication_state_int(VALUE) (?) where key="delta_sync_epoch"',$new_delta_sync_epoch);
+    $self->db->query('replace into replication_state_int(VALUE) (?) where key="delta_sync_epoch"',$self->time);
 
     #update remote_dirs;
     $remote_dirs = $self->remote_dirs;
@@ -129,7 +129,7 @@ sub mirror {
 		}
    	}
     say "FINISH SCRIPT " . $self->_timeused;
-    $self->db->query('replace into replication_state_int(VALUE) (?) where key="full_sync_epoch"',$new_delta_sync_epoch);
+    $self->db->query('replace into replication_state_int(VALUE) (?) where key="full_sync_epoch"',$self->time);
 
 }
 
@@ -316,7 +316,7 @@ sub _handle_sync{
         print "$loc_file_name ..uploading\n";
         my $try = 1;
         my $md5_hex = md5_hex($loc_file_name);
-		if (!$folder_id && $remote_file->can(parents)) {
+		if (!$folder_id && $remote_file->can('parents')) {
 			my $p = $remote_file->parents;
 			if (@$p >1) {
 				die "MANY PARENTS DO NOT WHICH TO CHOOSE"
@@ -357,13 +357,14 @@ sub _get_folder_id_by_localname {
     my ($self, $local_file) = @_;
     # look up in sqlite the cached parent_id?
     my $row = $self->db->query('select * from files_state where loc_pathfile = ?',$local_file->to_string_utf8)->hash;
-    if ($row && exists $row->{rem_parent_id} && $row->{rem_parent_id})
-    return $row->{rem_parent_id};
+    if ($row && exists $row->{rem_parent_id} && $row->{rem_parent_id}) {
+        return $row->{rem_parent_id};
+    }
 
     # start from root and work until you hit last dir?
     my $folder_id='root';
     for my $i(@{$self->local_root} .. ($#$local_file-1)) {
-    	$folder_id=$self->net_google_drive_simple->->children_by_folder_id($folder_id,'title="'.$local_file->[$i].'"')->id;
+    	$folder_id=$self->net_google_drive_simple->children_by_folder_id($folder_id,'title="'.$local_file->[$i].'"')->id;
     }
 	return $folder_id;
 }
