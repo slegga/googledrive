@@ -489,7 +489,7 @@ sub _construct_path{
 
         last if $parent_id eq 'root';
         die "Endless loop" if $i>20;
-        $ros = $self->net_google_drive_simple->search({},{page=>0},{id=>$parent_id});
+        my $ros = $self->net_google_drive_simple->search({},{page=>0},{id=>$parent_id});
         $rem_object->$ros->[0];
     }
     return Mojo::File->new($self->local_root, @r);
