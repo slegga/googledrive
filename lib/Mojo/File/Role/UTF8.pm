@@ -21,9 +21,9 @@ sub to_string_utf8 {
     my $self = shift;
     my $string = $self->to_string;
     #
-    my $return =  decode('UTF-8', $string, Encode::FB_DEFAULT);
-    $return =~ s/\x{E000}-\x{FFFD}/_/g;
-    return $return;
+#    my $return =  decode('UTF-8', $string, Encode::FB_DEFAULT);
+    #$return =~ s/\x{E000}-\x{FFFD}/_/g;
+    return $string;
     #return decode(encode('UTF-8', $octets, Encode::FB_CROAK);
 }
 

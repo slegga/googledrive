@@ -49,6 +49,7 @@ has 'local_files';
 has 'remote_dirs';
 has recursive_counter => 0;
 has 'time';
+has drive_encoding => 'Latin1';  # Encoding for from title field
 
 sub mirror {
     my ($self, $args) = @_;
@@ -61,6 +62,10 @@ sub mirror {
     # get list of localfiles:
 	my %lc = map { $_ => -d $_ } map { $_->with_roles('+UTF8')->to_string_utf8 } path($self->local_root)->list_tree({dont_use_nlink=>1,dir=>1})->each;
     my $remote_dirs = $self->remote_dirs;
+    if (! -d $self->local_root) {
+    	warn "Creating directory ".$self->local_root;
+    	$self->local_root->make_path;
+    }
     $remote_dirs->{$self->local_root } = $self->remote_root_ID;
 
 #	say "localfile $_" for keys %lc;
@@ -174,7 +179,7 @@ sub _process_folder_full {
     my $local_files = $self->local_files;
 
     for my $child (@$children) {
-        my $f = $child->can('originalFilename') ? $child->originalFilename : $child->title;
+        my $f = $child->can('originalFilename') ? decode('UTF-8',$child->originalFilename) : decode($self->drive_encoding,$child->title);
         my $file_name = decode('UTF-8', $f); #latin1 or utf8 ?
         # $file_name =~ s{/}{_};
         my $local_file = $path_mf->child($file_name)->with_roles('Mojo::File::Role::UTF8');
@@ -240,10 +245,10 @@ sub _should_sync {
         $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex
             , rem_file_id,   rem_filename, rem_mod_epoch, rem_md5_hex, act_epoch, act_action)
             VALUES(?,?,?,?,?, ?,?,?,?,?)'
-            ,$loc_pathfile , $loc_size, $loc_mod, $loc_md5_hex, $remote_file->id(), $remote_file->title(), $rem_mod , $remote_file->md5Checksum(), time, 'registered'
+            ,$loc_pathfile , $loc_size, $loc_mod, $loc_md5_hex, $remote_file->id(), decode($self->drive_encoding,$remote_file->title()), $rem_mod , $remote_file->md5Checksum(), time, 'registered'
         );
         $filedata = {loc_pathfile=>$loc_pathfile  , loc_size=>$loc_size, loc_mod_epoch=>$loc_mod, loc_md5_hex=>$loc_md5_hex,
-            , $remote_file->id(), rem_filename =>$remote_file->title(), rem_mod_epoch=>$rem_mod, rem_md5_hex=>$remote_file->md5Checksum() ,
+            , $remote_file->id(), rem_filename =>decode($self->drive_encoding,$remote_file->title()), rem_mod_epoch=>$rem_mod, rem_md5_hex=>$remote_file->md5Checksum() ,
              act_epoch=>time, 'registered'};
     }
     if (! $loc_mod || ! $loc_size) {
@@ -252,7 +257,7 @@ sub _should_sync {
     }
 
     # File not changed on disk
-    if ( $loc_size == $filedata->{loc_size} && $loc_mod == $filedata->{loc_mod_epoch} ) {
+    if ( $loc_size == ($filedata->{loc_size}//-1) && $loc_mod == ($filedata->{loc_mod_epoch}//-1) ) {
     	$loc_md5_hex = $filedata->{loc_md5_hex};
     } else {
         say "calc md5 for changed file ". $local_file;
@@ -266,10 +271,10 @@ sub _should_sync {
     }
 
 	#If a file is empty try to get it from other side
-    say "local:$loc_mod vs remote:$rem_mod  #  $loc_md5_hex vs ".$remote_file->md5Checksum(). "  # $loc_size vs ".$remote_file->file_Size ;
-    return 'ok' if $loc_size == 0 && $remote_file->file_Size == 0;
+    say "local:$loc_mod vs remote:$rem_mod  #  $loc_md5_hex vs ".$remote_file->md5Checksum(). "  # $loc_size vs ".$remote_file->fileSize ;
+    return 'ok' if $loc_size == 0 && $remote_file->fileSize == 0;
     return 'down' if $loc_size == 0;
-    return 'up'   if $remote_file->file_Size == 0;
+    return 'up'   if $remote_file->fileSize == 0;
     if ( -f $local_file and $rem_mod < $loc_mod ) {
         return 'up';
     } else {
@@ -409,14 +414,6 @@ sub _process_delta {
         $cache{$lfn} = $r;
     }
     for my $lc_pathfile (keys %lc) {
-        # if (! exists $cache{$lc_pathfile}{size} ) {
-        #     my $rem_object = $self->_get_remote_object_by_local_pathfile($lc_pathfile);
-        #     say $lc_pathfile;
-        #     warn Dumper $lc{$lc_pathfile};
-        #     die Dumper $cache{$lc_pathfile};
-        #     ...;
-        # }
-
         say "$lc_pathfile $lc{$lc_pathfile}{size} != $cache{$lc_pathfile}{loc_size} || $lc{$lc_pathfile}{mod} != ($cache{$lc_pathfile}{loc_mod_epoch}";
         say Dumper $cache{$lc_pathfile} if ! exists $cache{$lc_pathfile}{loc_size} || ! defined $cache{$lc_pathfile}{loc_size};
         if (! defined $lc{$lc_pathfile}{size}) {
@@ -446,7 +443,7 @@ sub _process_delta {
 
     # from remote to local
     for my $rem_object (@$rem_chg_objects) {
-        say "Remote".$rem_object->title;
+        say "Remote".decode($self->drive_encoding,$rem_object->title);
         my $lf_name = $self->_construct_path($rem_object);
         my $local_file = path($lf_name)->with_roles('+UTF8');
         my $sync = $self->_should_sync($rem_object, $local_file);
@@ -475,8 +472,7 @@ sub _construct_path{
     while (1) {
         $i++;
         die if ! defined $rem_object;
-        say $i.join @r;
-        unshift @r, $rem_object->title;
+        unshift @r, decode($self->drive_encoding,$rem_object->title);
         my $ps = $rem_object->parents;
         my $parent_id;
         if (ref $ps eq 'ARRAY') {
@@ -489,8 +485,10 @@ sub _construct_path{
 
         last if $parent_id eq 'root';
         die "Endless loop" if $i>20;
-        my $ros = $self->net_google_drive_simple->search({},{page=>0},{id=>$parent_id});
-        $rem_object->$ros->[0];
+        say $i.join('/',@$ps).$parent_id;
+
+        my $ros = $self->net_google_drive_simple->search({},{page=>0},"id='$parent_id'");
+        $rem_object = $ros->[0];
     }
     return Mojo::File->new($self->local_root, @r);
 }
