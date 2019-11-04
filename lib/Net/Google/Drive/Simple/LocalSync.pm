@@ -69,12 +69,12 @@ sub mirror {
 
     say "BEFORE _process_folder " . $self->_timeused;
     #may add to remove_dirs
-#    $self->_process_folder_full( $self->remote_root_ID, $self->local_root );
-    $self->_process_delta;
+    $self->_process_folder_full( $self->remote_root_ID, $self->local_root );
+#    $self->_process_delta;
 
     say "AFTER _process_folder " . $self->_timeused;
 
-    $self->db->query('replace into replication_state_int(VALUE) (?) where key="delta_sync_epoch"',$self->time);
+    $self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "delta_sync_epoch",$self->time);
 
     #update remote_dirs;
     $remote_dirs = $self->remote_dirs;
@@ -82,7 +82,7 @@ sub mirror {
 	# uploads new files
    	for my $lf (keys %{$self->local_files}) {
         my $local_file = path($lf)->with_roles('Mojo::File::Role::UTF8');
-        my $lf_name = $local_file->to_string_utf8;
+        my $lf_name = $local_file->to_string; #_utf8;
 		next if $lf_name =~/\/Camera Uploads\//; #do not replicate camera
 		next if $lf_name =~ /\/googledrive\/googledrive/; #do not replicate camera
         next if $lf_name =~ /\/googledrive[^\/]/; #do not replicate camera
@@ -106,7 +106,7 @@ sub mirror {
 
 
 		if (! $self->local_files->{$lf_name}) { #check if not dir
-			say "Create new file on Google Drive ".Encode::decode('UTF8',$local_file->basename) ." in dir ".Encode::decode('UTF8', $local_file->dirname);
+			say "Create new file on Google Drive ".$local_file->basename ." in dir ".$local_file->dirname; #Encode::decode('UTF8',
             my $try = 1;
             while ($try) {
                 eval {
@@ -129,7 +129,7 @@ sub mirror {
 		}
    	}
     say "FINISH SCRIPT " . $self->_timeused;
-    $self->db->query('replace into replication_state_int(VALUE) (?) where key="full_sync_epoch"',$self->time);
+    $self->db->query('replace into replication_state_int(key,value) VALUES(?,?) ',"full_sync_epoch",$self->time);
 
 }
 
@@ -178,15 +178,15 @@ sub _process_folder_full {
         my $file_name = decode('UTF-8', $f); #latin1 or utf8 ?
         # $file_name =~ s{/}{_};
         my $local_file = $path_mf->child($file_name)->with_roles('Mojo::File::Role::UTF8');
-        my $loc_file_name = $local_file->to_string_utf8;
-        delete $local_files->{$loc_file_name};
+        my $loc_pathfile = $local_file->to_string_utf8;
+        delete $local_files->{$loc_pathfile};
 
         # Ignore document. Edit on line instead.
         next if $child->can("exportLinks");
 
         # pdfs and the like get downloaded directly
         if ( $child->can("downloadUrl") ) {
-            $self->handle_sync($child, $local_file);
+            $self->_handle_sync($child, $local_file);
             next;
         }
         # if we reach this, we could not "fetch" the file. A dir, then..
@@ -208,46 +208,46 @@ sub _process_folder_full {
 
 sub _should_sync {
     my ( $self, $remote_file, $local_file ) = @_;
-    my $loc_file_name = $local_file->to_string_utf8;
+    my $loc_pathfile = $local_file->to_string_utf8;
     die "Not implemented" if $self->{force};
-    die "NO LOCAL FILE" if ! $loc_file_name ;
+    die "NO LOCAL FILE" if ! $loc_pathfile ;
 #    if ( $remote_file->labels->{trashed} ) {
 #        return 'delete_local';
 #    }
 
     my $date_time_parser = DateTime::Format::RFC3339->new();
 
-    my ($loc_size,$loc_mod)  = ( stat($loc_file_name ) )[7,9];
+    my ($loc_size,$loc_mod)  = ( stat($loc_pathfile ) )[7,9];
     my $rem_mod = $date_time_parser->parse_datetime( $remote_file->modifiedDate() )->epoch();
-	return 'ok' if -d $loc_file_name ;
+	return 'ok' if -d $loc_pathfile ;
 	my $rffs = $remote_file->fileSize();
 	return 'down' if ! defined $loc_mod;
-	my $filedata = $self->db->query('select * from files_state where loc_pathfile = ?',$loc_file_name )->hash;
+	my $filedata = $self->db->query('select * from files_state where loc_pathfile = ?',$loc_pathfile )->hash;
 
 	my $loc_md5_hex;
 
     if (! keys %$filedata) {
         # file exists in remote and local but not registered in sqlite cache
 
-        for my $r( $self->db->query('select * from files_state where loc_pathfile like ?',substr($loc_file_name ,0, 4).'%')->hashes->each ) {
+        for my $r( $self->db->query('select * from files_state where loc_pathfile like ?',substr($loc_pathfile ,0, 4).'%')->hashes->each ) {
             next if !$r;
             say $r if ref $r ne 'HASH';
-            say join('#', grep{$_} map{$self->_utf8ifing($_)} grep {$_} values %$r) ;
+            #say join('#', grep{$_} map{$self->_utf8ifing($_)} grep {$_} values %$r) ;
         }
-        # die "No data cached data for $loc_file_name";
-        say "insert cache $loc_file_name ";
-        my $loc_md5_hex = md5_hex($loc_file_name );
+        # die "No data cached data for $loc_pathfile";
+        say "insert cache $loc_pathfile ";
+        my $loc_md5_hex = md5_hex($loc_pathfile );
         $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex
             , rem_file_id,   rem_filename, rem_mod_epoch, rem_md5_hex, act_epoch, act_action)
             VALUES(?,?,?,?,?, ?,?,?,?,?)'
-            ,$loc_file_name , $loc_size, $loc_mod, $loc_md5_hex, $remote_file->id(), $remote_file->title(), $rem_mod , $remote_file->md5Checksum(), time, 'registered'
+            ,$loc_pathfile , $loc_size, $loc_mod, $loc_md5_hex, $remote_file->id(), $remote_file->title(), $rem_mod , $remote_file->md5Checksum(), time, 'registered'
         );
-        $filedata = {loc_pathfile=>$loc_file_name  , loc_size=>$loc_size, loc_mod_epoch=>$loc_mod, loc_md5_hex=>$loc_md5_hex,
+        $filedata = {loc_pathfile=>$loc_pathfile  , loc_size=>$loc_size, loc_mod_epoch=>$loc_mod, loc_md5_hex=>$loc_md5_hex,
             , $remote_file->id(), rem_filename =>$remote_file->title(), rem_mod_epoch=>$rem_mod, rem_md5_hex=>$remote_file->md5Checksum() ,
              act_epoch=>time, 'registered'};
     }
-    if (! $loc_mod) {
-        die "File does not exists $loc_file_name";
+    if (! $loc_mod || ! $loc_size) {
+        warn "File does not exists $loc_pathfile ".($loc_mod//'__UNDEF__').'  '. ($loc_size//'__UNDEF__');
         # $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex)',?,?,?,?);
     }
 
@@ -257,7 +257,7 @@ sub _should_sync {
     } else {
         say "calc md5 for changed file ". $local_file;
     	$loc_md5_hex = md5_hex(path($local_file)->slurp);
-    	$self->db->query('update files_state set loc_tmp_md5_hex = ? where loc_pathfile = ?',$loc_md5_hex, $loc_file_name );
+    	$self->db->query('update files_state set loc_tmp_md5_hex = ? where loc_pathfile = ?',$loc_md5_hex, $loc_pathfile );
     }
 
 	# filediffer up or down?
@@ -265,7 +265,11 @@ sub _should_sync {
  		return 'ok';
     }
 
-	#warn sprintf "%s    %s:%s    %s:%s", $local_file, int( $rem_mod / 10 ), int( $loc_mod / 10 ) , $remote_file->fileSize() , -s $loc_file_name ;
+	#If a file is empty try to get it from other side
+    say "local:$loc_mod vs remote:$rem_mod  #  $loc_md5_hex vs ".$remote_file->md5Checksum(). "  # $loc_size vs ".$remote_file->file_Size ;
+    return 'ok' if $loc_size == 0 && $remote_file->file_Size == 0;
+    return 'down' if $loc_size == 0;
+    return 'up'   if $remote_file->file_Size == 0;
     if ( -f $local_file and $rem_mod < $loc_mod ) {
         return 'up';
     } else {
@@ -294,59 +298,74 @@ sub _utf8ifing {
 ######################################################################################
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
-    my $loc_file_name = $local_file->to_string_utf8;
-    die "NO LOCAL FILE" if ! $loc_file_name;
+    my $loc_pathfile = $local_file->to_string_utf8;
+    die "NO LOCAL FILE" if ! $loc_pathfile;
     my $s = $self->_should_sync( $remote_file, $local_file );
-    my ($local_size, $local_mod) = (stat($loc_file_name))[7,9];
+    my ($loc_size, $loc_mod) = (stat($loc_pathfile))[7,9];
     if ( $s eq 'down' ) {
-        print "$loc_file_name ..downloading\n";
-
+        return if $remote_file->fileSize == 0;
+        print "$loc_pathfile ..downloading\n";
         #atomic download
-        my $tmpfile = Mojo::File::tempfile;
-        $self->google_drive_simple->download( $remote_file, $tmpfile );
-        move($tmpfile, $loc_file_name);
+        my $tmpfile = "/tmp/".$remote_file->md5Checksum;
+        $self->net_google_drive_simple->download( $remote_file, $tmpfile );
+        if (-s $tmpfile) {
+            move($tmpfile, $loc_pathfile);
+        } else {
+            die "download error $tmpfile." .Dumper $remote_file;
+        }
 
+        my $ps = $remote_file->parents;
+        die "Not a array" . Dumper $ps if ! ref $ps eq 'ARRAY';
+        my $rem_parent_id;
+        $rem_parent_id  = $ps->[0]->{id};
+        die Dumper $rem_parent_id if ref $rem_parent_id;
         $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex,
-        rem_file_id, rem_parent_id, rem_md5_hex
+        rem_file_id, rem_parent_id, rem_md5_hex,
         act_epoch,act_action)
-            VALUES (?,?,?,?)',$loc_file_name,$local_size,$local_mod,$remote_file->md5Checksum,
-            $remote_file->file_id,$remote_file->parents->[0],$remote_file->md5Checksum,
+            VALUES (?,?,?,?,?,?,?,?,?)',$loc_pathfile,$loc_size,$loc_mod,$remote_file->md5Checksum,
+            $remote_file->id,$rem_parent_id,$remote_file->md5Checksum,
             time,'download');
-    } elsif ( $s eq 'up' ) {
-        print "$loc_file_name ..uploading\n";
+    } elsif ( $s eq 'up' && $loc_size>0 ) {
+        print "$loc_pathfile ..uploading\n";
         my $try = 1;
-        my $md5_hex = md5_hex($loc_file_name);
+        my $md5_hex = md5_hex($loc_pathfile);
 		if (!$folder_id && $remote_file->can('parents')) {
 			my $p = $remote_file->parents;
 			if (@$p >1) {
 				die "MANY PARENTS DO NOT WHICH TO CHOOSE"
 			} elsif (@$p == 1) {
-				$folder_id = $p->[0];
+				$folder_id = $p->[0]->{id};
 			}
 		}
 
         if (! $folder_id) {
-            $folder_id = $self->_get_folder_id_by($loc_file_name);
+            $folder_id = $self->_get_folder_id_by($loc_pathfile);
+
         }
+        die "folder_id is not a scalar\n" . Dumper $folder_id  if ref $folder_id;
 
         while ($try) {
             eval {
-                $self->google_drive_simple->file_upload( $loc_file_name, $folder_id );
+                $self->net_google_drive_simple->file_upload( $loc_pathfile, $folder_id );
                 $try=0;
+                print "$_;" for( $loc_pathfile,$loc_size,$loc_mod, $md5_hex,
+                    $remote_file->id,$folder_id, $md5_hex,
+                    time,'upload');
+                print "\n\n";
                 $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex,
-                rem_file_id, rem_parent_id, rem_md5_hex
+                rem_file_id, rem_parent_id, rem_md5_hex,
                 act_epoch,act_action)
-                    VALUES (?,?,?,?)',$loc_file_name,$local_size,$local_mod,$md5_hex,
-                    $remote_file->file_id,$folder_id,$md5_hex,
+                    VALUES (?,?,?,?,?,?,?,?,?)',$loc_pathfile,$loc_size,$loc_mod, $md5_hex,
+                    $remote_file->id,$folder_id, $md5_hex,
                     time,'upload');
 
                 1;
             } or warn $@;
         }
 #                $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex)
-#                  	VALUES (?,?,?,?)',$loc_file_name ,$local_size,$local_mod,$md5_hex);
+#                  	VALUES (?,?,?,?)',$loc_pathfile ,$loc_size,$loc_mod,$md5_hex);
     } elsif ( $s eq 'ok' ) {
-        print "$loc_file_name ..ok\n";
+        print "$loc_pathfile ..ok\n";
     } else {
         ...;
     }
@@ -364,7 +383,7 @@ sub _get_folder_id_by_localname {
     # start from root and work until you hit last dir?
     my $folder_id='root';
     for my $i(@{$self->local_root} .. ($#$local_file-1)) {
-    	$folder_id=$self->net_google_drive_simple->children_by_folder_id($folder_id,'title="'.$local_file->[$i].'"')->id;
+    	$folder_id=$self->net_google_drive_simple->children_by_folder_id($folder_id,'title="'.$local_file->[$i].'"')->[0]->id;
     }
 	return $folder_id;
 }
@@ -381,14 +400,18 @@ sub _process_delta {
     my $local_root = $self->local_root;
     my $dt = DateTime::Format::RFC3339->new();
     my $new_delta_sync_epoch = time;
-    my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { $_->with_roles('+UTF8')->to_string_utf8 } path( "$local_root" )->list_tree({dont_use_nlink=>1,dir=>1})->each;
+    my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { $_->with_roles('+UTF8')->to_string_utf8 } grep {defined $_} path( "$local_root" )->list_tree({dont_use_nlink=>1,dir=>1})->each;
     my $tmpc = $self->db->query('select * from files_state')->hashes->to_array;
     my %cache;
     for my $r(@$tmpc) {
-        my $lfn =delete $r->{loc_file_name};
+        die Dumper $r if !exists $r->{loc_pathfile};
+        my $lfn = delete $r->{loc_pathfile};
         $cache{$lfn} = $r;
     }
     for my $lc_pathfile (keys %lc) {
+        if (! defined $lc{$lc_pathfile}{size}) {
+            die $lc_pathfile . Dumper $lc{$lc_pathfile};
+        }
         if (!%cache || ! exists $cache{$lc_pathfile} || ! $cache{$lc_pathfile} ) {
             $lc{$lc_pathfile}{sync} = 1;
         }
@@ -400,7 +423,12 @@ sub _process_delta {
         }
     }
     my $gd=$self->net_google_drive_simple;
-    my $cache_last_delta_sync_epoch  = $self->db->query("select value from replication_state_int where key = 'delta_sync_epoch'")->hash->{value};
+    my $cache_last_delta_sync_epoch  = $self->db->query("select value from replication_state_int where key = 'delta_sync_epoch'")->hash;
+    if (ref $cache_last_delta_sync_epoch) {
+        $cache_last_delta_sync_epoch = $cache_last_delta_sync_epoch->{value}
+    } else {
+        die "Shall not be runned delta updates if not set delta_sync_epoch";
+    }
     my $rem_chg_objects = $gd->search(sprintf("modifiedDate > '%s'", $dt->format_datetime(DateTime->from_epoch($cache_last_delta_sync_epoch))));
     print Dumper $rem_chg_objects;
 
@@ -425,7 +453,7 @@ sub _process_delta {
 
 
     }
-    $self->db->query('replace into replication_state_int(VALUE) (?) where key="delta_sync_epoch"',$new_delta_sync_epoch);
+    $self->db->query('replace into replication_state_int(key,value) VALUES(?, ?)',"delta_sync_epoch",$new_delta_sync_epoch);
 }
 
 
@@ -530,7 +558,7 @@ download_condition can be used to change the behaviour of mirror(). I.e. do not 
         download_condition => sub {
             my ($self, $remote_file, $local_file) = @_;
             say "Remote:     ", $remote_file->title();
-            say "`--> Local: $loc_file_name;
+            say "`--> Local: $loc_pathfile;
             return 0;
         }
     );
