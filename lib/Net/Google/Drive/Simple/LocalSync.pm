@@ -13,10 +13,10 @@ use Data::Dumper;
 use Mojo::SQLite;
 use Encode qw(decode encode);
 use File::Copy;
+use utf8;
 
 use FindBin;
 use lib "FindBin::Bin/../lib";
-use Mojo::File::Role::UTF8;
 binmode STDOUT, ':encoding(UTF-8)';
 
 
@@ -56,11 +56,11 @@ sub mirror {
     $self->time(time);
     say "START: ". (time - $self->time);
     #update database if new version
-    my $path = Mojo::Home->new->child('migrations', 'files_state.sql')->with_roles('Mojo::File::Role::UTF8');
-	$self->sqlite->migrations->from_file($path->to_string_utf8)->migrate;
+    my $path = Mojo::Home->new->child('migrations', 'files_state.sql');
+	$self->sqlite->migrations->from_file($path->to_string)->migrate;
 
     # get list of localfiles:
-	my %lc = map { $_ => -d $_ } map { $_->with_roles('+UTF8')->to_string_utf8 } path($self->local_root)->list_tree({dont_use_nlink=>1,dir=>1})->each;
+	my %lc = map { $_ => -d $_ } map { $_->to_string } path($self->local_root)->list_tree({dont_use_nlink=>1,dir=>1})->each;
     my $remote_dirs = $self->remote_dirs;
     if (! -d $self->local_root) {
     	warn "Creating directory ".$self->local_root;
@@ -86,15 +86,14 @@ sub mirror {
 
 	# uploads new files
    	for my $lf (keys %{$self->local_files}) {
-        my $local_file = path($lf)->with_roles('Mojo::File::Role::UTF8');
+        my $local_file = path($lf);
         my $lf_name = $local_file->to_string; #_utf8;
 		next if $lf_name =~/\/Camera Uploads\//; #do not replicate camera
 		next if $lf_name =~ /\/googledrive\/googledrive/; #do not replicate camera
         next if $lf_name =~ /\/googledrive[^\/]/; #do not replicate camera
 		my $locfol = $local_file->dirname;
 
-        #$locfol = $locfol->with_roles('Mojo::File::Role::UTF8'); This did not work on 8.25
-		my $local_dir = Encode::decode('UTF-8', $locfol->to_string);
+		my $local_dir = $locfol->to_string;
 		#$local_dir .='/' if $local_dir !~/\/$/; # secure last /
 
 		my $did = $remote_dirs->{$local_dir};
@@ -111,7 +110,7 @@ sub mirror {
 
 
 		if (! $self->local_files->{$lf_name}) { #check if not dir
-			say "Create new file on Google Drive ".$local_file->basename ." in dir ".$local_file->dirname; #Encode::decode('UTF8',
+			say encode('UTF-8',"Create new file on Google Drive ").$local_file->basename .encode('UTF-8'," in dir "). $local_file->dirname; #Encode::decode('UTF8',
             my $try = 1;
             while ($try) {
                 eval {
@@ -147,16 +146,16 @@ sub _timeused {
 sub _make_path {
     my ( $self, $path_mf ) = @_;
     my $remote_dirs = $self->remote_dirs;
-	my $full_path = $path_mf->to_string_utf8;
+	my $full_path = $path_mf->to_string;
    	#$full_path .='/' if $full_path !~/\/$/; # secure last /
     $self->recursive_counter($self->recursive_counter+1);
     say "Makepath in: $full_path";
     die "looping $path_mf" if $self->recursive_counter>8;
-    die"Stop loop at $path_mf $self->recursive_counter \n".join("\n", sort keys %$remote_dirs) if $full_path eq '/' || $full_path eq $self->local_root->with_roles('Mojo::File::Role::UTF8')->to_string_utf8;
+    die"Stop loop at $path_mf $self->recursive_counter \n".join("\n", sort keys %$remote_dirs) if $full_path eq '/' || $full_path eq $self->local_root->to_string;
 	my $locfol = $path_mf->dirname;
 	#my $lfs = $locfol->to_string;
 	#$lfs .='/' if $lfs !~/\/$/; # secure last /
-	my $did = $remote_dirs->{$locfol->to_string_utf8};
+	my $did = $remote_dirs->{$locfol->to_string};
 	if (!$did) {
 #			die "$lfs does not exists in ". Dumper  $remote_dirs;
 			$did = $self->_make_path($locfol);
@@ -179,11 +178,11 @@ sub _process_folder_full {
     my $local_files = $self->local_files;
 
     for my $child (@$children) {
-        my $f = $child->can('originalFilename') ? decode('UTF-8',$child->originalFilename) : decode($self->drive_encoding,$child->title);
-        my $file_name = decode('UTF-8', $f); #latin1 or utf8 ?
+        my $f = $child->can('originalFilename') ? $self->_decode_remote_string($child->originalFilename) : $self->_decode_remote_string($child->title);
+        my $file_name = $f;#decode('UTF-8', $f); #latin1 or utf8 ?
         # $file_name =~ s{/}{_};
-        my $local_file = $path_mf->child($file_name)->with_roles('Mojo::File::Role::UTF8');
-        my $loc_pathfile = $local_file->to_string_utf8;
+        my $local_file = $path_mf->child($file_name);
+        my $loc_pathfile = $local_file->to_string;
         delete $local_files->{$loc_pathfile};
 
         # Ignore document. Edit on line instead.
@@ -213,7 +212,7 @@ sub _process_folder_full {
 
 sub _should_sync {
     my ( $self, $remote_file, $local_file ) = @_;
-    my $loc_pathfile = $local_file->to_string_utf8;
+    my $loc_pathfile = $local_file->to_string;
     die "Not implemented" if $self->{force};
     die "NO LOCAL FILE" if ! $loc_pathfile ;
 #    if ( $remote_file->labels->{trashed} ) {
@@ -245,10 +244,10 @@ sub _should_sync {
         $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex
             , rem_file_id,   rem_filename, rem_mod_epoch, rem_md5_hex, act_epoch, act_action)
             VALUES(?,?,?,?,?, ?,?,?,?,?)'
-            ,$loc_pathfile , $loc_size, $loc_mod, $loc_md5_hex, $remote_file->id(), decode($self->drive_encoding,$remote_file->title()), $rem_mod , $remote_file->md5Checksum(), time, 'registered'
+            ,$loc_pathfile , $loc_size, $loc_mod, $loc_md5_hex, $remote_file->id(), $self->_decode_remote_string($remote_file->title), $rem_mod , $remote_file->md5Checksum(), time, 'registered'
         );
         $filedata = {loc_pathfile=>$loc_pathfile  , loc_size=>$loc_size, loc_mod_epoch=>$loc_mod, loc_md5_hex=>$loc_md5_hex,
-            , $remote_file->id(), rem_filename =>decode($self->drive_encoding,$remote_file->title()), rem_mod_epoch=>$rem_mod, rem_md5_hex=>$remote_file->md5Checksum() ,
+            , $remote_file->id(), rem_filename =>$self->_decode_remote_string($remote_file->title), rem_mod_epoch=>$rem_mod, rem_md5_hex=>$remote_file->md5Checksum() ,
              act_epoch=>time, 'registered'};
     }
     if (! $loc_mod || ! $loc_size) {
@@ -303,20 +302,24 @@ sub _utf8ifing {
 ######################################################################################
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
-    my $loc_pathfile = $local_file->to_string_utf8;
+    print $local_file->to_string."  ";
+    my $loc_pathfile = $local_file->to_string;
+    say " ".$loc_pathfile;
     die "NO LOCAL FILE" if ! $loc_pathfile;
     my $s = $self->_should_sync( $remote_file, $local_file );
     my ($loc_size, $loc_mod) = (stat($loc_pathfile))[7,9];
     if ( $s eq 'down' ) {
         return if $remote_file->fileSize == 0;
-        print "$loc_pathfile ..downloading\n";
         #atomic download
+        print "$loc_pathfile ..downloading\n";
         my $tmpfile = "/tmp/".$remote_file->md5Checksum;
         $self->net_google_drive_simple->download( $remote_file, $tmpfile );
         if (-s $tmpfile) {
             move($tmpfile, $loc_pathfile);
         } else {
-            die "download error $tmpfile." .Dumper $remote_file;
+            $self->db->query('replace into files_state (loc_pathfile,loc_size,act_epoch,act_action) VALUES(?,?,?)',$loc_pathfile,0,time,'abort download of empty or none existing file');
+            return;
+#            die "download error $tmpfile." .Dumper $remote_file;
         }
 
         my $ps = $remote_file->parents;
@@ -380,7 +383,7 @@ sub _handle_sync{
 sub _get_folder_id_by_localname {
     my ($self, $local_file) = @_;
     # look up in sqlite the cached parent_id?
-    my $row = $self->db->query('select * from files_state where loc_pathfile = ?',$local_file->to_string_utf8)->hash;
+    my $row = $self->db->query('select * from files_state where loc_pathfile = ?',$local_file->to_string)->hash;
     if ($row && exists $row->{rem_parent_id} && $row->{rem_parent_id}) {
         return $row->{rem_parent_id};
     }
@@ -391,6 +394,15 @@ sub _get_folder_id_by_localname {
     	$folder_id=$self->net_google_drive_simple->children_by_folder_id($folder_id,'title="'.$local_file->[$i].'"')->[0]->id;
     }
 	return $folder_id;
+}
+
+# _decode_remote_string
+# Get takes string from "remote" like title and decod it.
+sub _decode_remote_string {
+	my $self = shift;
+	my $rstring = shift;
+    die $rstring if ! utf8::decode($rstring);
+	return $rstring;
 }
 ######################################################################################
 ######################################################################################
@@ -405,7 +417,7 @@ sub _process_delta {
     my $local_root = $self->local_root;
     my $dt = DateTime::Format::RFC3339->new();
     my $new_delta_sync_epoch = time;
-    my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { $_->with_roles('+UTF8')->to_string_utf8 } grep {defined $_} path( "$local_root" )->list_tree({dont_use_nlink=>1})->each;
+    my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { $_->to_string } grep {defined $_} path( "$local_root" )->list_tree({dont_use_nlink=>1})->each;
     my $tmpc = $self->db->query('select * from files_state')->hashes->to_array;
     my %cache=();
     for my $r(@$tmpc) {
@@ -443,9 +455,9 @@ sub _process_delta {
 
     # from remote to local
     for my $rem_object (@$rem_chg_objects) {
-        say "Remote".decode($self->drive_encoding,$rem_object->title);
+        say "Remote".$self->_decode_remote_string($rem_object->title);
         my $lf_name = $self->_construct_path($rem_object);
-        my $local_file = path($lf_name)->with_roles('+UTF8');
+        my $local_file = path($lf_name);
         my $sync = $self->_should_sync($rem_object, $local_file);
         $self->handle_sync($rem_object, $local_file, $sync);
     }
@@ -472,7 +484,7 @@ sub _construct_path{
     while (1) {
         $i++;
         die if ! defined $rem_object;
-        unshift @r, decode($self->drive_encoding,$rem_object->title);
+        unshift @r, $self->_decode_remote_string($rem_object->title);
         my $ps = $rem_object->parents;
         my $parent_id;
         if (ref $ps eq 'ARRAY') {
