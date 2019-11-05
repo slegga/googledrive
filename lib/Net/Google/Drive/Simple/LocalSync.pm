@@ -259,9 +259,9 @@ sub _should_sync {
     if ( $loc_size == ($filedata->{loc_size}//-1) && $loc_mod == ($filedata->{loc_mod_epoch}//-1) ) {
     	$loc_md5_hex = $filedata->{loc_md5_hex};
     } else {
-        say "calc md5 for changed file ". $local_file;
+        say "calc md5 for changed file ". $local_file->to_string;
     	$loc_md5_hex = md5_hex(path($local_file)->slurp);
-    	$self->db->query('update files_state set loc_tmp_md5_hex = ? where loc_pathfile = ?',$loc_md5_hex, $loc_pathfile );
+    	$self->db->query('update files_state set loc_size =?, loc_mod_epoch =?, loc_tmp_md5_hex = ? where loc_pathfile = ?',$loc_size,$loc_mod,$loc_md5_hex, $loc_pathfile );
     }
 
 	# filediffer up or down?
@@ -302,6 +302,7 @@ sub _utf8ifing {
 ######################################################################################
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
+    my $remote_file_size = $remote_file->can('fileSize') ? $remote_file->fileSize() : $remote_file->{fileSize};
     print $local_file->to_string."  ";
     my $loc_pathfile = $local_file->to_string;
     say " ".$loc_pathfile;
@@ -309,7 +310,7 @@ sub _handle_sync{
     my $s = $self->_should_sync( $remote_file, $local_file );
     my ($loc_size, $loc_mod) = (stat($loc_pathfile))[7,9];
     if ( $s eq 'down' ) {
-        return if $remote_file->fileSize == 0;
+        return if $remote_file_size == 0;
         #atomic download
         print "$loc_pathfile ..downloading\n";
         my $tmpfile = "/tmp/".$remote_file->md5Checksum;
@@ -460,9 +461,11 @@ sub _process_delta {
 
     # from remote to local
     for my $rem_object (@$rem_chg_objects) {
-        say "Remote".$self->_decode_remote_string($rem_object->title);
+        say "Remote ".$self->_decode_remote_string($rem_object->title);
+        #se på å slå opp i cache før construct
         my $lf_name = $self->_construct_path($rem_object);
         my $local_file = path($lf_name);
+        #TODO $self->db->query(); replace into files_state (rem_file_id,loc_pathfile,rem_md5_hex)
         my $sync = $self->_should_sync($rem_object, $local_file);
         $self->_handle_sync($rem_object, $local_file, $sync);
     }
@@ -471,11 +474,24 @@ sub _process_delta {
     for my $key (keys %lc) {
         next if ! exists $lc{$key}{sync};
         next if ! $lc{$key}{sync};
-        my ($folder_id,$file_id) = $self->_get_remoteids_from_local_filename($key);
+        my ($folder_id,$file_id) = $self->_get_remote_metadata_from_local_filename($key);
 
         #$self->_handle_sync($rem_object, $local_file, $sync);
     }
     $self->db->query('replace into replication_state_int(key,value) VALUES(?, ?)',"delta_sync_epoch",$new_delta_sync_epoch);
+}
+
+sub _get_remote_metadata_from_local_filename {
+	my ($self,$loc_pathfile) = @_;
+
+	#return cached if present
+	my $row =  $self->db->query('select rem_parent_id, rem_file_id from files_state where loc_pathfile = ?', $loc_pathfile)->hash;
+	if (keys %$row) {
+		return ($row->{rem_parent_id},$row->{rem_file_id});
+	}
+	# work from root to file
+	my $remote_pathfile = path($loc_pathfile);
+	...;
 }
 
 sub _construct_path{
@@ -484,14 +500,14 @@ sub _construct_path{
     die if ! defined $rem_object;
     my $i =0;
     my $parent_id = $rem_object->parents->[0]->{id};
-    my @r=($rem_object->title);
+    my @r=($self->_decode_remote_string($rem_object->title));
 
     while (1) {
         $i++;
         last if !$parent_id || $parent_id eq 'root';
 
         die if ! defined $rem_object;
-        say $i.' '.join('/',@r).' '.$parent_id;
+        #say $i.' '.join('/',@r).' '.$parent_id;
         $rem_object = $self->net_google_drive_simple->file_metadata($parent_id);
               last if ! $rem_object->{parents}->[0]->{id};
         unshift @r, $self->_decode_remote_string($rem_object->{title});
