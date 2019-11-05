@@ -7,7 +7,6 @@ use Carp;
 use Mojo::File 'path';
 use Mojo::Home;
 use Digest::MD5 qw /md5_hex/;
-use Encode qw /decode encode/;
 use utf8;
 use Data::Dumper;
 use Mojo::SQLite;
@@ -74,8 +73,9 @@ sub mirror {
 
     say "BEFORE _process_folder " . $self->_timeused;
     #may add to remove_dirs
-    $self->_process_folder_full( $self->remote_root_ID, $self->local_root );
-#    $self->_process_delta;
+
+#    $self->_process_folder_full( $self->remote_root_ID, $self->local_root );
+    $self->_process_delta;
 
     say "AFTER _process_folder " . $self->_timeused;
 
@@ -423,13 +423,17 @@ sub _process_delta {
     for my $r(@$tmpc) {
         die Dumper $r if !exists $r->{loc_pathfile};
         my $lfn = delete $r->{loc_pathfile};
+#        $lfn = decode('UTF8',$lfn);
+        # utf8::upgrade($lfn);
         $cache{$lfn} = $r;
     }
     for my $lc_pathfile (keys %lc) {
-        say "$lc_pathfile $lc{$lc_pathfile}{size} != $cache{$lc_pathfile}{loc_size} || $lc{$lc_pathfile}{mod} != ($cache{$lc_pathfile}{loc_mod_epoch}";
+
+        printf encode('UTF8','%s %s != %s || %s != %s'."\n"),decode('UTF8',$lc_pathfile), ($lc{$lc_pathfile}{size}//-1),($cache{$lc_pathfile}{loc_size}//-1),($lc{$lc_pathfile}{mod}//-1),($cache{$lc_pathfile}{loc_mod_epoch}//-1);
         say Dumper $cache{$lc_pathfile} if ! exists $cache{$lc_pathfile}{loc_size} || ! defined $cache{$lc_pathfile}{loc_size};
         if (! defined $lc{$lc_pathfile}{size}) {
-            die $lc_pathfile . Dumper $lc{$lc_pathfile};
+            warn $lc_pathfile . Dumper $lc{$lc_pathfile};
+            die;
         }
         if (!keys %cache || ! exists $cache{$lc_pathfile} || ! $cache{$lc_pathfile} ) {
             $lc{$lc_pathfile}{sync} = 1;
@@ -479,28 +483,30 @@ sub _construct_path{
     my $self = shift;
     my $rem_object = shift;
     die if ! defined $rem_object;
-    my @r;
     my $i =0;
+    my $parent_id = $rem_object->parents->[0]->{id};
+    my @r=($rem_object->title);
+
     while (1) {
         $i++;
+        last if $parent_id eq 'root' || ! $parent_id ;
+
         die if ! defined $rem_object;
-        unshift @r, $self->_decode_remote_string($rem_object->title);
-        my $ps = $rem_object->parents;
-        my $parent_id;
+        say $i.' '.join('/',@r).' '.$parent_id;
+        $rem_object = $self->net_google_drive_simple->file_metadata($parent_id);
+        unshift @r, $self->_decode_remote_string($rem_object->{title});
+        my $ps = $rem_object->{parents};
         if (ref $ps eq 'ARRAY') {
             $parent_id = $ps->[0]->{id};
         } else {
-            die Dumper$ps;
+            die Dumper $rem_object;
         }
 
 
 
-        last if $parent_id eq 'root';
         die "Endless loop" if $i>20;
-        say $i.join('/',@$ps).$parent_id;
 
-        my $ros = $self->net_google_drive_simple->search({},{page=>0},"id='$parent_id'");
-        $rem_object = $ros->[0];
+        #$rem_object = $ros;
     }
     return Mojo::File->new($self->local_root, @r);
 }
