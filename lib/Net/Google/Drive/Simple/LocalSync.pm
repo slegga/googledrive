@@ -224,7 +224,7 @@ sub _should_sync {
     my ($loc_size,$loc_mod)  = ( stat($loc_pathfile ) )[7,9];
     my $rem_mod = $date_time_parser->parse_datetime( $remote_file->modifiedDate() )->epoch();
 	return 'ok' if -d $loc_pathfile ;
-	my $rffs = $remote_file->fileSize();
+	my $rffs = $remote_file->can('fileSize') ? $remote_file->fileSize() : $remote_file->{fileSize}; #object or hash
 	return 'down' if ! defined $loc_mod;
 	my $filedata = $self->db->query('select * from files_state where loc_pathfile = ?',$loc_pathfile )->hash;
 
@@ -317,6 +317,7 @@ sub _handle_sync{
         if (-s $tmpfile) {
             move($tmpfile, $loc_pathfile);
         } else {
+        	say "ERROR: file not found or empty $tmpfile";
             $self->db->query('replace into files_state (loc_pathfile,loc_size,act_epoch,act_action) VALUES(?,?,?)',$loc_pathfile,0,time,'abort download of empty or none existing file');
             return;
 #            die "download error $tmpfile." .Dumper $remote_file;
@@ -463,7 +464,7 @@ sub _process_delta {
         my $lf_name = $self->_construct_path($rem_object);
         my $local_file = path($lf_name);
         my $sync = $self->_should_sync($rem_object, $local_file);
-        $self->handle_sync($rem_object, $local_file, $sync);
+        $self->_handle_sync($rem_object, $local_file, $sync);
     }
 
     # from local to remote
@@ -472,9 +473,7 @@ sub _process_delta {
         next if ! $lc{$key}{sync};
         my ($folder_id,$file_id) = $self->_get_remoteids_from_local_filename($key);
 
-
-
-
+        #$self->_handle_sync($rem_object, $local_file, $sync);
     }
     $self->db->query('replace into replication_state_int(key,value) VALUES(?, ?)',"delta_sync_epoch",$new_delta_sync_epoch);
 }
@@ -489,11 +488,12 @@ sub _construct_path{
 
     while (1) {
         $i++;
-        last if $parent_id eq 'root' || ! $parent_id ;
+        last if !$parent_id || $parent_id eq 'root';
 
         die if ! defined $rem_object;
         say $i.' '.join('/',@r).' '.$parent_id;
         $rem_object = $self->net_google_drive_simple->file_metadata($parent_id);
+              last if ! $rem_object->{parents}->[0]->{id};
         unshift @r, $self->_decode_remote_string($rem_object->{title});
         my $ps = $rem_object->{parents};
         if (ref $ps eq 'ARRAY') {
@@ -501,9 +501,6 @@ sub _construct_path{
         } else {
             die Dumper $rem_object;
         }
-
-
-
         die "Endless loop" if $i>20;
 
         #$rem_object = $ros;
