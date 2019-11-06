@@ -216,6 +216,8 @@ sub _process_folder_full {
 sub _get_rem_value {
 	my $remote_file = shift;
 	my $key=shift;
+	say ref $remote_file;
+	confess Dumper $remote_file if ( ref $remote_file eq 'ARRAY');
 	return (ref $remote_file eq 'HASH' ? $remote_file->{$key} : $remote_file->$key);
 }
 
@@ -322,7 +324,7 @@ sub _handle_sync{
     	say "unlink $local_file";
     	return;
     }
-    say Dumper $remote_file;
+    #say Dumper $remote_file;
     my $remote_file_size =  _get_rem_value( $remote_file, 'fileSize');
     print $local_file->to_string."  ";
     my $loc_pathfile = $local_file->to_string;
@@ -514,6 +516,7 @@ sub _get_remote_metadata_from_local_filename {
 	if (keys %$row) {
 		return if ! $row->{rem_file_id};
 		$return = $self->net_google_drive_simple->file_metadata($row->{rem_file_id});
+		die Dumper $return if ref $return eq 'ARRAY';
 		if ($return) {
 			return $return;
 		} else {
