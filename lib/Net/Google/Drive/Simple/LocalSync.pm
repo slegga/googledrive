@@ -213,6 +213,12 @@ sub _process_folder_full {
     $self->local_files($local_files);
 }
 
+sub _get_rem_value {
+	my $remote_file = shift;
+	my $key=shift;
+	return (ref $remote_file eq 'HASH' ? $remote_file->{$key} : $remote_file->$key);
+}
+
 sub _should_sync {
     my ( $self, $remote_file, $local_file ) = @_;
     my $loc_pathfile = $local_file->to_string;
@@ -225,9 +231,9 @@ sub _should_sync {
     my $date_time_parser = DateTime::Format::RFC3339->new();
 
     my ($loc_size,$loc_mod)  = ( stat($loc_pathfile ) )[7,9];
-    my $rem_mod = $date_time_parser->parse_datetime( $remote_file->modifiedDate() )->epoch();
+    my $rem_mod = $date_time_parser->parse_datetime( _get_rem_value($remote_file,'modifiedDate') )->epoch();
 	return 'ok' if -d $loc_pathfile ;
-	my $rffs = $remote_file->can('fileSize') ? $remote_file->fileSize() : $remote_file->{fileSize}; #object or hash
+	my $rffs = _get_rem_value($remote_file,'fileSize'); #object or hash
 	return 'down' if ! defined $loc_mod;
 	my $filedata = $self->db->query('select * from files_state where loc_pathfile = ?',$loc_pathfile )->hash;
 
@@ -268,7 +274,7 @@ sub _should_sync {
     }
 
 	# filediffer up or down?
-    if ( ($loc_md5_hex//-1) eq $remote_file->md5Checksum()) {
+    if ( ($loc_md5_hex//-1) eq _get_rem_value($remote_file,'md5Checksum') ) {
  		return 'ok';
     }
 
@@ -311,7 +317,13 @@ sub _utf8ifing {
 ######################################################################################
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
-    my $remote_file_size = $remote_file->can('fileSize') ? $remote_file->fileSize() : $remote_file->{fileSize};
+    if (! defined $remote_file) {
+    	# deleted on server delete local
+    	say "unlink $local_file";
+    	return;
+    }
+    say Dumper $remote_file;
+    my $remote_file_size =  _get_rem_value( $remote_file, 'fileSize');
     print $local_file->to_string."  ";
     my $loc_pathfile = $local_file->to_string;
     say " ".$loc_pathfile;
@@ -319,7 +331,7 @@ sub _handle_sync{
     my $s = $self->_should_sync( $remote_file, $local_file );
     my ($loc_size, $loc_mod) = (stat($loc_pathfile))[7,9];
     if ( $s eq 'down' ) {
-        return if $remote_file_size == 0;
+        return if ($remote_file_size//0) == 0;
         #atomic download
         print "$loc_pathfile ..downloading\n";
         my $tmpfile = "/tmp/".($remote_file->can('md5Checksum') ? $remote_file->md5Checksum : $remote_file->{md5Checksum});
@@ -386,7 +398,7 @@ sub _handle_sync{
     } elsif ( $s eq 'ok' ) {
         print "$loc_pathfile ..ok\n";
         $self->db->query('replace into files_state (loc_pathfile,rem_md5_hex) VALUES(?,?)'
-            ,$loc_pathfile,($remote_file->can('md5Checksum') ? $remote_file->md5Checksum : $remote_file->{md5Checksum}));
+            ,$loc_pathfile,_get_rem_value($remote_file,'md5Checksum'));
     } else {
         ...;
     }
@@ -487,21 +499,31 @@ sub _process_delta {
     for my $key (keys %lc) {
         next if ! exists $lc{$key}{sync};
         next if ! $lc{$key}{sync};
-        my ($folder_id,$file_id) = $self->_get_remote_metadata_from_local_filename($key);
-
-        #$self->_handle_sync($rem_object, $local_file, $sync);
+        my $rem_object = $self->_get_remote_metadata_from_local_filename($key);
+		my $local_file = path($key);
+        $self->_handle_sync($rem_object, $local_file,  $lc{$key}{sync});
     }
     $self->db->query('replace into replication_state_int(key,value) VALUES(?, ?)',"delta_sync_epoch",$new_delta_sync_epoch);
 }
 
 sub _get_remote_metadata_from_local_filename {
 	my ($self,$loc_pathfile) = @_;
-
+    my $return;
 	# return cached if present
 	my $row =  $self->db->query('select rem_parent_id, rem_file_id from files_state where loc_pathfile = ?', $loc_pathfile)->hash;
 	if (keys %$row) {
-		return ($row->{rem_parent_id},$row->{rem_file_id});
+		return if ! $row->{rem_file_id};
+		$return = $self->net_google_drive_simple->file_metadata($row->{rem_file_id});
+		if ($return) {
+			return $return;
+		} else {
+			# file removed from server
+			# delete from local disk
+			return;
+		}
 	}
+
+
 
     # search for file. If one candidate pick that one
     my $remote_pathfile = substr($loc_pathfile,length($self->local_root->to_string));
@@ -509,7 +531,7 @@ sub _get_remote_metadata_from_local_filename {
     my @candidates = $self->net_google_drive_simple->search({},{page=>0},"title = '".$remote_path[-1]."'");
     my %candy=();
     my $i = $#remote_path;
-    my $return;
+    #my $return;
     if (@candidates == 1) {
         return $candidates[0];
     } elsif(@candidates > 1) {
