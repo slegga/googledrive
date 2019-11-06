@@ -436,8 +436,10 @@ sub _process_delta {
     }
     for my $lc_pathfile (keys %lc) {
 
-        printf encode('UTF8','%s %s != %s || %s != %s'."\n"),decode('UTF8',$lc_pathfile), ($lc{$lc_pathfile}{size}//-1),($cache{$lc_pathfile}{loc_size}//-1),($lc{$lc_pathfile}{mod}//-1),($cache{$lc_pathfile}{loc_mod_epoch}//-1);
-        say Dumper $cache{$lc_pathfile} if ! exists $cache{$lc_pathfile}{loc_size} || ! defined $cache{$lc_pathfile}{loc_size} if $ENV{NMS_DEBUG};
+        printf encode('UTF8','%s %s != %s || %s != %s'."\n"),decode('UTF8',$lc_pathfile), ($lc{$lc_pathfile}{size}//-1)
+            ,($cache{$lc_pathfile}{loc_size}//-1),($lc{$lc_pathfile}{mod}//-1),($cache{$lc_pathfile}{loc_mod_epoch}//-1)
+            && $ENV{NMS_DEBUG};
+        say Dumper $cache{$lc_pathfile} if (! exists $cache{$lc_pathfile}{loc_size} || ! defined $cache{$lc_pathfile}{loc_size}) && $ENV{NMS_DEBUG};
         if (! defined $lc{$lc_pathfile}{size}) {
             warn $lc_pathfile . Dumper $lc{$lc_pathfile};
             die;
