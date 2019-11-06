@@ -277,6 +277,12 @@ sub _should_sync {
     return 'ok' if $loc_size == 0 && $remote_file->fileSize == 0;
     return 'down' if $loc_size == 0;
     return 'up'   if $remote_file->fileSize == 0;
+    my $delta_sync_epoch = $self->db->query('select value replication_state_int where key = "delta_sync_epoch"',)->hash->{value};
+    if($delta_sync_epoch>$rem_mod && $delta_sync_epoch>$loc_mod) {
+        warn "CONFLICT LOCAL VS REMOTE CHANGED AFTER LAST SYNC $loc_pathfile";
+        ...;
+        # TODO move local file to "$ENV{HOME}.googledrive/conflicts" and log the incident and message to user.
+    }
     if ( -f $local_file and $rem_mod < $loc_mod ) {
         return 'up';
     } else {
