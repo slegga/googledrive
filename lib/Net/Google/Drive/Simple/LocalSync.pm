@@ -190,7 +190,8 @@ sub _should_sync {
     return 'ok' if $loc_size == 0 && _get_rem_value($remote_file,'fileSize') == 0;
     return 'down' if $loc_size == 0;
     return 'up'   if _get_rem_value($remote_file,'fileSize') == 0;
-    my $delta_sync_epoch = $self->db->query('select value from replication_state_int where key = \'delta_sync_epoch\'',)->hash->{value};
+    my $delta_sync_epoch = $self->db->query('select value from replication_state_int where key = \'delta_sync_epoch\'',)->hash;
+    $delta_sync_epoch = ref $delta_sync_epoch ?  $delta_sync_epoch->{value} : 0;
     if($delta_sync_epoch>$rem_mod && $delta_sync_epoch>$loc_mod) {
         warn "CONFLICT LOCAL VS REMOTE CHANGED AFTER LAST SYNC $loc_pathfile";
         my $conflict_bck = path($ENV{HOME},'.googledrive','conflict-removed',$loc_pathfile);
@@ -426,7 +427,8 @@ sub _process_delta {
     if (ref $cache_last_delta_sync_epoch) {
         $cache_last_delta_sync_epoch = $cache_last_delta_sync_epoch->{value}
     } else {
-        die "Shall not be runned delta updates if not set delta_sync_epoch";
+    	$cache_last_delta_sync_epoch=0;
+#        die "Shall not be runned delta updates if not set delta_sync_epoch";
     }
     my $rem_chg_objects = $gd->search({},{page=>0},sprintf("modifiedDate > '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$cache_last_delta_sync_epoch))));
     print Dumper $rem_chg_objects  if $ENV{NMS_DEBUG};
