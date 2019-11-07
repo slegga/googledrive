@@ -232,7 +232,7 @@ sub _handle_sync{
     my $s; # sync option chosed
     if (! defined $remote_file) {
     	# deleted on server try to find new remote_file_object
-		my $remote_file_id = $self->_get_file_object_id_by_localname("$local_file",{dir=>0});
+		my $remote_file_id = $self->_get_file_object_id_by_localname($local_file,{dir=>0});
 
 		$remote_file = $self->net_google_drive_simple->file_metadata($remote_file_id) if $remote_file_id;
     	# else delete
@@ -344,10 +344,14 @@ sub _handle_sync{
 
 sub _get_file_object_id_by_localname {
     my ($self, $local_file,$args) = @_;
-    my $parent_lockup = 0;
+    die"Expect Mojo::File $local_file".ref $local_file  if  ref $local_file ne 'Mojo::File';
+    die"Expect Mojo::File local_root".ref $self->local_root  if ref $self->local_root ne 'Mojo::File';
+        my $parent_lockup = 0;
     $parent_lockup =1 if (defined $args && $args->{dir});
     my @path =();
-    for my $i(@{$self->local_root} .. ($#$local_file - $parent_lockup)) {
+    my $start = @{$self->local_root};
+    my $end = @{$local_file->to_array} - 1 - $parent_lockup;
+    for my $i($start .. $end) {
     	push(@path, $local_file->[$i]);
     }
     my $remote_path = path(@path);
