@@ -73,66 +73,7 @@ sub mirror {
 
     say "BEFORE _process_folder " . $self->_timeused;
     #may add to remove_dirs
-    if (1) {
-        $self->_process_delta;
-    } else {
-        $self->_process_folder_full( $self->remote_root_ID, $self->local_root );
-
-        say "AFTER _process_folder " . $self->_timeused;
-
-        #update remote_dirs;
-        $remote_dirs = $self->remote_dirs;
-
-    	# uploads new files
-       	for my $lf (keys %{$self->local_files}) {
-            my $local_file = path($lf);
-            my $lf_name = $local_file->to_string; #_utf8;
-    		next if $lf_name =~/\/Camera Uploads\//; #do not replicate camera
-    		next if $lf_name =~ /\/googledrive\/googledrive/; #do not replicate camera
-            next if $lf_name =~ /\/googledrive[^\/]/; #do not replicate camera
-    		my $locfol = $local_file->dirname;
-
-    		my $local_dir = $locfol->to_string;
-    		#$local_dir .='/' if $local_dir !~/\/$/; # secure last /
-
-    		my $did = $remote_dirs->{$local_dir};
-    		$did = $self->_make_path($locfol) if (!$did);
-    		die if ! $did;
-
-    #		say "push new file $local_file->basename. $did . ' # '.  $local_file->dirname->to_string;
-    		die "No local_file" if ! $lf_name;
-    		if (! $did) {
-    			warn "No directory id";
-                $remote_dirs = $self->remote_dirs;
-    			die Dumper $remote_dirs;
-    		}
-
-
-    		if (! $self->local_files->{$lf_name}) { #check if not dir
-    			say encode('UTF-8',"Create new file on Google Drive ").$local_file->basename .encode('UTF-8'," in dir "). $local_file->dirname; #Encode::decode('UTF8',
-                my $try = 1;
-                while ($try) {
-                    eval {
-                        if (-f $lf_name) {
-                            my $cache = $self->db->query('select * from files_state where loc_pathfile = ?',$lf_name );
-                            if (! defined $cache || !keys %$cache ||! exists $cache->{rem_file_id} || ! $cache->{rem_file_id}) {
-                                $self->net_google_drive_simple->file_upload( $lf_name, $did );
-                            } else {
-                                $self->net_google_drive_simple->file_upload( $lf_name, $did, $cache->{rem_file_id} );
-                            }
-                        } else {
-                            say "File does not exists locally $lf_name ignore file. Probably encoding errors";
-                        }
-                        $try=0;
-                        1;
-                    } or warn $@;
-                }
-
-                say "Finish $lf_name";
-    		}
-       	}
-        $self->db->query('replace into replication_state_int(key,value) VALUES(?,?) ',"full_sync_epoch",$self->time);
-    }
+    $self->_process_delta;
 
     $self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "delta_sync_epoch",$self->time);
 
@@ -172,53 +113,16 @@ sub _make_path {
 	return $did;
 }
 
-sub _process_folder_full {
-    my ( $self, $folder_id, $path_mf ) = @_;
-    return if $path_mf->to_string =~ /\/googledrive\/googledrive/; #do not replicate camera
-    my $gd       = $self->net_google_drive_simple;
-    my $children = $gd->children_by_folder_id($folder_id);
-    my $remote_dirs = $self->remote_dirs;
-    my $local_files = $self->local_files;
-
-    for my $child (@$children) {
-        my $f = $child->can('originalFilename') ? $self->_decode_remote_string($child->originalFilename) : $self->_decode_remote_string($child->title);
-        my $file_name = $f;#decode('UTF-8', $f); #latin1 or utf8 ?
-        # $file_name =~ s{/}{_};
-        my $local_file = $path_mf->child($file_name);
-        my $loc_pathfile = $local_file->to_string;
-        delete $local_files->{$loc_pathfile};
-
-        # Ignore document. Edit on line instead.
-        next if $child->can("exportLinks");
-
-        # pdfs and the like get downloaded directly
-        if ( $child->can("downloadUrl") ) {
-            $self->_handle_sync($child, $local_file);
-            next;
-        }
-        # if we reach this, we could not "fetch" the file. A dir, then..
-        my $dir = $path_mf->child($file_name);
-        # "$dir" .='/' if "$dir" !~/\/$/; # secure last /
-        $remote_dirs->{"$dir"} = $child->id();
-        mkdir( "$dir" ) unless -d "$dir";
-
-        # write hashes to object
-        $self->remote_dirs($remote_dirs);
-        $self->local_files($local_files);
-        _process_folder_full( $self, $child->id(), $dir );
-        $remote_dirs = $self->remote_dirs();
-        $local_files = $self->local_files();
-
-    }
-    $self->local_files($local_files);
-}
-
 sub _get_rem_value {
 	my $remote_file = shift;
 	my $key=shift;
-	say ref $remote_file;
-	confess Dumper $remote_file if ( ref $remote_file eq 'ARRAY');
-	return (ref $remote_file eq 'HASH' ? $remote_file->{$key} : $remote_file->$key);
+#	say ref $remote_file;
+	confess Dumper $remote_file if ( ref $remote_file eq 'ARRAY' || ! ref $remote_file);
+	return $remote_file->{$key} if ref $remote_file eq 'HASH' && exists $remote_file->{$key};
+	return $remote_file->$key if $remote_file->can($key);
+	print STDERR $key.."  ".ref($remote_file)."\n";
+	warn Dumper $remote_file;
+	die;
 }
 
 sub _should_sync {
@@ -226,9 +130,6 @@ sub _should_sync {
     my $loc_pathfile = $local_file->to_string;
     die "Not implemented" if $self->{force};
     die "NO LOCAL FILE" if ! $loc_pathfile ;
-#    if ( $remote_file->labels->{trashed} ) {
-#        return 'delete_local';
-#    }
 
     my $date_time_parser = DateTime::Format::RFC3339->new();
 
@@ -255,10 +156,10 @@ sub _should_sync {
         $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex
             , rem_file_id,   rem_filename, rem_mod_epoch, rem_md5_hex, act_epoch, act_action)
             VALUES(?,?,?,?,?, ?,?,?,?,?)'
-            ,$loc_pathfile , $loc_size, $loc_mod, $loc_md5_hex, $remote_file->id(), $self->_decode_remote_string($remote_file->title), $rem_mod , $remote_file->md5Checksum(), time, 'registered'
+            ,$loc_pathfile , $loc_size, $loc_mod, $loc_md5_hex, _get_rem_value($remote_file,'id'), $self->_decode_remote_string(_get_rem_value($remote_file,'title')), $rem_mod , _get_rem_value($remote_file,'md5Checksum'), time, 'registered'
         );
         $filedata = {loc_pathfile=>$loc_pathfile  , loc_size=>$loc_size, loc_mod_epoch=>$loc_mod, loc_md5_hex=>$loc_md5_hex,
-            , $remote_file->id(), rem_filename =>$self->_decode_remote_string($remote_file->title), rem_mod_epoch=>$rem_mod, rem_md5_hex=>$remote_file->md5Checksum() ,
+            , _get_rem_value($remote_file,'id'), rem_filename =>$self->_decode_remote_string(_get_rem_value($remote_file,'title')), rem_mod_epoch=>$rem_mod, rem_md5_hex=>_get_rem_value($remote_file,'md5Checksum') ,
              act_epoch=>time, 'registered'};
     }
     if (! $loc_mod || ! $loc_size) {
@@ -276,20 +177,27 @@ sub _should_sync {
     }
 
 	# filediffer up or down?
-    if ( ($loc_md5_hex//-1) eq _get_rem_value($remote_file,'md5Checksum') ) {
+    if ( ($loc_md5_hex//-1) eq (_get_rem_value($remote_file,'md5Checksum')//-1) ) {
+    	if (! defined $loc_md5_hex) {
+    		$self->db->query('delete from files_state where loc_filepath = ?', $local_file->to_string);
+    		return 'cleanup';
+    	}
  		return 'ok';
     }
 
 	#If a file is empty try to get it from other side
-    say "local:$loc_mod vs remote:$rem_mod  #  $loc_md5_hex vs ".$remote_file->md5Checksum(). "  # $loc_size vs ".$remote_file->fileSize ;
-    return 'ok' if $loc_size == 0 && $remote_file->fileSize == 0;
+    say "local:$loc_mod vs remote:$rem_mod  #  $loc_md5_hex vs ".(_get_rem_value($remote_file,'md5Checksum')//-1). "  # $loc_size vs ".(_get_rem_value($remote_file,'fileSize') //-1);
+    return 'ok' if $loc_size == 0 && _get_rem_value($remote_file,'fileSize') == 0;
     return 'down' if $loc_size == 0;
-    return 'up'   if $remote_file->fileSize == 0;
-    my $delta_sync_epoch = $self->db->query('select value replication_state_int where key = "delta_sync_epoch"',)->hash->{value};
+    return 'up'   if _get_rem_value($remote_file,'fileSize') == 0;
+    my $delta_sync_epoch = $self->db->query('select value from replication_state_int where key = \'delta_sync_epoch\'',)->hash->{value};
     if($delta_sync_epoch>$rem_mod && $delta_sync_epoch>$loc_mod) {
         warn "CONFLICT LOCAL VS REMOTE CHANGED AFTER LAST SYNC $loc_pathfile";
-        ...;
-        # TODO move local file to "$ENV{HOME}.googledrive/conflicts" and log the incident and message to user.
+        my $conflict_bck = path($ENV{HOME},'.googledrive','conflict-removed',$loc_pathfile);
+        $conflict_bck->dirname->make_path;
+       	move($loc_pathfile, $conflict_bck->to_string);
+       	say "LOCAL FILE MOVED TO ".decode('UTF8',$conflict_bck->to_string);
+       	return 'down';
     }
     if ( -f $local_file and $rem_mod < $loc_mod ) {
         return 'up';
@@ -319,34 +227,55 @@ sub _utf8ifing {
 ######################################################################################
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
+    my $row;
+    say "w ".decode('UTF8',$local_file->to_string);
+    my $s; # sync option chosed
     if (! defined $remote_file) {
-    	# deleted on server delete local
-    	say "unlink $local_file";
-    	return;
+    	# deleted on server try to find new remote_file_object
+		my $remote_file_id = $self->_get_file_object_id_by_localname("$local_file",{dir=>0});
+
+		$remote_file = $self->net_google_drive_simple->file_metadata($remote_file_id) if $remote_file_id;
+    	# else delete
+    	$row = $self->db->query('select * from files_state where loc_pathfile =?', $local_file->to_string)->hash;
+    	if (! defined $remote_file) {
+    		if( $row && $row->{rem_file_id}) {
+		    	say decode('UTF8',"unlink $local_file");
+	 	   		return;
+	 	   	} else {
+	 	   		say "Should uploade. New file ".decode('UTF8',$local_file);
+	 	   		#upload
+	 	 		$s='up';
+	 	   	}
+ 	   	}
     }
+    if (ref $remote_file eq 'HASH') {
+    	$remote_file = $self->net_google_drive_simple->data_factory($remote_file);
+    }
+
     #say Dumper $remote_file;
-    my $remote_file_size =  _get_rem_value( $remote_file, 'fileSize');
-    print $local_file->to_string."  ";
+    my $remote_file_size = $remote_file ? _get_rem_value( $remote_file, 'fileSize') : undef;
     my $loc_pathfile = $local_file->to_string;
-    say " ".$loc_pathfile;
+    say "x ".decode('UTF8',$loc_pathfile);
     die "NO LOCAL FILE" if ! $loc_pathfile;
-    my $s = $self->_should_sync( $remote_file, $local_file );
+    $s ||= $self->_should_sync( $remote_file, $local_file );
     my ($loc_size, $loc_mod) = (stat($loc_pathfile))[7,9];
     if ( $s eq 'down' ) {
         return if ($remote_file_size//0) == 0;
         #atomic download
         print "$loc_pathfile ..downloading\n";
-        my $tmpfile = "/tmp/".($remote_file->can('md5Checksum') ? $remote_file->md5Checksum : $remote_file->{md5Checksum});
+        my $tmpfile = "/tmp/"._get_rem_value($remote_file,'md5Checksum');
         $self->net_google_drive_simple->download( $remote_file, $tmpfile );
         if (-s $tmpfile) {
             move($tmpfile, $loc_pathfile);
         } else {
         	say "ERROR: file not found or empty $tmpfile";
-            $self->db->query('replace into files_state (loc_pathfile,loc_size,act_epoch,act_action) VALUES(?,?,?,?)',$loc_pathfile,0,time,'abort download of empty or none existing file');
+            $self->db->query('replace into files_state (loc_pathfile,loc_size,act_epoch,act_action,rem_file_id,rem_md5_hex,rem_size)
+            	VALUES(?,?,?,?,?,?,?)',$loc_pathfile,0,time,'abort download of empty or none existing file'
+            	, _get_rem_value( $remote_file, 'id'),_get_rem_value( $remote_file, 'md5Checksum'), _get_rem_value( $remote_file, 'fileSize'));
             return;
 #            die "download error $tmpfile." .Dumper $remote_file;
         }
-
+		die Dumper $remote_file if ref $remote_file eq 'HASH';
         my $ps = $remote_file->parents;
         die "Not a array" . Dumper $ps if ! ref $ps eq 'ARRAY';
         my $rem_parent_id;
@@ -355,13 +284,14 @@ sub _handle_sync{
         $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex,
         rem_file_id, rem_parent_id, rem_md5_hex,
         act_epoch,act_action)
-            VALUES (?,?,?,?,?,?,?,?,?)',$loc_pathfile,$loc_size,$loc_mod,($remote_file->can('md5Checksum') ? $remote_file->md5Checksum : $remote_file->{md5Checksum}),
-            $remote_file->id,$rem_parent_id,($remote_file->can('md5Checksum') ? $remote_file->md5Checksum : $remote_file->{md5Checksum}),
+            VALUES (?,?,?,?,?,?,?,?,?)',$loc_pathfile,$loc_size,$loc_mod,_get_rem_value($remote_file,'md5Checksum'),
+            _get_rem_value($remote_file,'id'),$rem_parent_id,_get_rem_value($remote_file,'md5Checksum'),
             time,'download');
     } elsif ( $s eq 'up' && $loc_size>0 ) {
         print "$loc_pathfile ..uploading\n";
         my $try = 1;
         my $md5_hex = md5_hex($loc_pathfile);
+        die Dumper $remote_file if ref $remote_file eq 'HASH';
 		if (!$folder_id && $remote_file->can('parents')) {
 			my $p = $remote_file->parents;
 			if (@$p >1) {
@@ -379,17 +309,20 @@ sub _handle_sync{
 
         while ($try) {
             eval {
-                $self->net_google_drive_simple->file_upload( $loc_pathfile, $folder_id );
+            	my $rem_file_id;
+            	if ($remote_file) {
+	                $rem_file_id = $self->net_google_drive_simple->file_upload( $loc_pathfile, $folder_id, _get_rem_value($remote_file,'id') );
+	            } else {
+	            	$rem_file_id = $self->net_google_drive_simple->file_upload( $loc_pathfile, $folder_id);
+	            }
                 $try=0;
                 print "$_;" for( $loc_pathfile,$loc_size,$loc_mod, $md5_hex,
-                    $remote_file->id,$folder_id, $md5_hex,
+                    ,$folder_id, $md5_hex,
                     time,'upload');
                 print "\n\n";
-                $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex,
-                rem_file_id, rem_parent_id, rem_md5_hex,
-                act_epoch,act_action)
+                $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex, rem_file_id, rem_parent_id, rem_md5_hex, act_epoch,act_action)
                     VALUES (?,?,?,?,?,?,?,?,?)',$loc_pathfile,$loc_size,$loc_mod, $md5_hex,
-                    $remote_file->id,$folder_id, $md5_hex,
+                    , $rem_file_id,$folder_id, $md5_hex,
                     time,'upload');
 
                 1;
@@ -401,26 +334,36 @@ sub _handle_sync{
         print "$loc_pathfile ..ok\n";
         $self->db->query('replace into files_state (loc_pathfile,rem_md5_hex) VALUES(?,?)'
             ,$loc_pathfile,_get_rem_value($remote_file,'md5Checksum'));
+    } elsif ($s eq 'cleanup') {
+    #
     } else {
         ...;
     }
 
 }
 
-sub _get_folder_id_by_localname {
-    my ($self, $local_file) = @_;
-    # look up in sqlite the cached parent_id?
-    my $row = $self->db->query('select * from files_state where loc_pathfile = ?',$local_file->to_string)->hash;
-    if ($row && exists $row->{rem_parent_id} && $row->{rem_parent_id}) {
-        return $row->{rem_parent_id};
+sub _get_file_object_id_by_localname {
+    my ($self, $local_file,$args) = @_;
+    my $parent_lockup = 0;
+    $parent_lockup =1 if (defined $args && $args->{dir});
+    my @path =();
+    for my $i(@{$self->local_root} .. ($#$local_file - $parent_lockup)) {
+    	push(@path, $local_file->[$i]);
     }
+    my $remote_path = path(@path);
+    my @ids = $self->net_google_drive_simple->path_resolve(encode('UTF8','/').$remote_path->to_string);
+    # look up in sqlite the cached parent_id?
+#    my $row = $self->db->query('select * from files_state where loc_pathfile = ?',$local_file->to_string)->hash;
+#    if ($row && exists $row->{rem_parent_id} && $row->{rem_parent_id}) {
+#        return $row->{rem_parent_id};
+#    }
 
     # start from root and work until you hit last dir?
-    my $folder_id='root';
-    for my $i(@{$self->local_root} .. ($#$local_file-1)) {
-    	$folder_id=$self->net_google_drive_simple->children_by_folder_id($folder_id,'title="'.$local_file->[$i].'"')->[0]->id;
-    }
-	return $folder_id;
+#    my $object_id='root';
+#    for my $i(@{$self->local_root} .. ($#$local_file - $parent_lockup)) {
+#    	$object_id=$self->net_google_drive_simple->children_by_folder_id($object_id,{},'title="'.$local_file->[$i].'"')->[0]->id;
+#    }
+	return $ids[$parent_lockup]; # root is the last one
 }
 
 # _decode_remote_string
@@ -487,7 +430,8 @@ sub _process_delta {
     # process changes
 
     # from remote to local
-    for my $rem_object (@$rem_chg_objects) {
+    say "START PROCESS CHANGES REMOTE " . $self->_timeused;
+        for my $rem_object (@$rem_chg_objects) {
         say "Remote ".$self->_decode_remote_string($rem_object->title);
         #se på å slå opp i cache før construct
         my $lf_name = $self->_construct_path($rem_object);
@@ -498,10 +442,12 @@ sub _process_delta {
     }
 
     # from local to remote
+    say "START PROCESS CHANGES LOCAL " . $self->_timeused;
     for my $key (keys %lc) {
         next if ! exists $lc{$key}{sync};
         next if ! $lc{$key}{sync};
         my $rem_object = $self->_get_remote_metadata_from_local_filename($key);
+        $rem_object = undef if ref $rem_object eq 'ARRAY' && @$rem_object == 0;
 		my $local_file = path($key);
         $self->_handle_sync($rem_object, $local_file,  $lc{$key}{sync});
     }

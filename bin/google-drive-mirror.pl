@@ -18,6 +18,7 @@ my $home = path($ENV{HOME});
 my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
     remote_root => path('/'),
     local_root  => $home->child('googledrive'),
+    conflict_resolution => 'keep_remote',
 );
 
 $google_docs->mirror();
