@@ -171,6 +171,7 @@ sub _should_sync {
     if ( $loc_size == ($filedata->{loc_size}//-1) && $loc_mod == ($filedata->{loc_mod_epoch}//-1) ) {
     	$loc_md5_hex = $filedata->{loc_md5_hex}//md5_hex(path($local_file)->slurp);
     } else {
+        printf "File changes on disk .%s$loc_size == ($filedata->{loc_size}//-1) && $loc_mod == ($filedata->{loc_mod_epoch}//-1)", $loc_size;
         say "calc md5 for changed file ". $local_file->to_string;
     	$loc_md5_hex = md5_hex(path($local_file)->slurp);
     	$self->db->query('update files_state set loc_size =?, loc_mod_epoch =?, loc_tmp_md5_hex = ? where loc_pathfile = ?',$loc_size,$loc_mod,$loc_md5_hex, $loc_pathfile );
@@ -452,7 +453,8 @@ sub _process_delta {
     for my $key (keys %lc) {
         next if ! exists $lc{$key}{sync};
         next if ! $lc{$key}{sync};
-        my $rem_object = $self->_get_remote_metadata_from_local_filename($key);
+        my $rem_object = $self->_get_file_object_id_by_localname($key);
+        #_get_remote_metadata_from_local_filename($key);
         $rem_object = undef if ref $rem_object eq 'ARRAY' && @$rem_object == 0;
 		my $local_file = path($key);
         $self->_handle_sync($rem_object, $local_file,  $lc{$key}{sync});
@@ -460,50 +462,52 @@ sub _process_delta {
     $self->db->query('replace into replication_state_int(key,value) VALUES(?, ?)',"delta_sync_epoch",$new_delta_sync_epoch);
 }
 
-sub _get_remote_metadata_from_local_filename {
-	my ($self,$loc_pathfile) = @_;
-    my $return;
+
+#sub _get_remote_metadata_from_local_filename {
+#	my ($self,$loc_pathfile) = @_;
+#    my $return;
 	# return cached if present
-	my $row =  $self->db->query('select rem_parent_id, rem_file_id from files_state where loc_pathfile = ?', $loc_pathfile)->hash;
-	if (keys %$row) {
-		return if ! $row->{rem_file_id};
-		$return = $self->net_google_drive_simple->file_metadata($row->{rem_file_id});
-		die Dumper $return if ref $return eq 'ARRAY';
-		if ($return) {
-			return $return;
-		} else {
+#	my $row =  $self->db->query('select rem_parent_id, rem_file_id from files_state where loc_pathfile = ?', $loc_pathfile)->hash;
+#	if (keys %$row) {
+#		return if ! $row->{rem_file_id};
+#		$return = $self->net_google_drive_simple->file_metadata($row->{rem_file_id});
+#		die Dumper $return if ref $return eq 'ARRAY';
+#		if ($return) {
+#			return $return;
+#		} else {
 			# file removed from server
 			# delete from local disk
-			return;
-		}
-	}
+#			return;
+#		}
+#	}
 
 
 
     # search for file. If one candidate pick that one
-    my $remote_pathfile = substr($loc_pathfile,length($self->local_root->to_string));
-    my @remote_path = path($remote_pathfile)->to_array;
-    my @candidates = $self->net_google_drive_simple->search({},{page=>0},"title = '".$remote_path[-1]."'");
-    my %candy=();
-    my $i = $#remote_path;
+#    my $remote_pathfile = substr($loc_pathfile,length($self->local_root->to_string));
+#    my @remote_path = path($remote_pathfile)->to_array;
+#    my @candidates = $self->net_google_drive_simple->search({},{page=>0},"title = '".$remote_path[-1]."'");
+#    my %candy=();
+#    my $i = $#remote_path;
     #my $return;
-    if (@candidates == 1) {
-        return $candidates[0];
-    } elsif(@candidates > 1) {
-        for my $c (@candidates ) {
-            $candy{$c->parents->[0]->{id}} = $c;
-        }
-        while(1) {
-            last if $i<0;
-            ...;
-            $i--;
-        }
-    } else {
+#    if (@candidates == 1) {
+#        return $candidates[0];
+#    } elsif(@candidates > 1) {
+#        for my $c (@candidates ) {
+#            $candy{$c->parents->[0]->{id}} = $c;
+#        }
+#        while(1) {
+#            last if $i<0;
+#            ...;
+#            $i--;
+#        }
+#    } else {
         #return
-        return;
-    }
-}
+#        return;
+#    }
+#}
 
+# construct local path
 sub _construct_path{
     my $self = shift;
     my $rem_object = shift;
