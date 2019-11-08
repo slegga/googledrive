@@ -47,12 +47,34 @@ has 'local_root';
 has 'local_files';
 has 'remote_dirs';
 has recursive_counter => 0;
+has new_time => sub{time()};
 has 'time';
-has drive_encoding => 'Latin1';  # Encoding for from title field
+has 'old_time' => sub {
+    my $self =shift;
+    my $tmp = $self->db->query('select value from replication_state_int where key = \'delta_sync_epoch\'',)->hash;
+    if (ref $tmp) {
+        return $tmp->value;
+    } else {
+        return 0;
+    }
+};
+has last_end_run_time => sub {
+    my $self =shift;
+    my $tmp = $self->db->query('select value from replication_state_int where key = \'delta_sync_epoch_end_run\'',)->hash;
+    if (ref $tmp) {
+        return $tmp->value;
+    } else {
+        return $self->old_time;
+    }
+};
+#has drive_encoding => 'Latin1';  # Encoding for from title field
 
 sub mirror {
     my ($self, $args) = @_;
     $self->time(time);
+    
+    
+    $self->new_time(time);
     say "START: ". (time - $self->time);
     #update database if new version
     my $path = Mojo::Home->new->child('migrations', 'files_state.sql');
@@ -75,7 +97,8 @@ sub mirror {
     #may add to remove_dirs
     $self->_process_delta;
 
-    $self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "delta_sync_epoch",$self->time);
+    $self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "delta_sync_epoch",$self->new_time);
+    $self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "delta_sync_epoch_end_run",time);
 
     say "FINISH SCRIPT " . $self->_timeused;
 
@@ -86,8 +109,8 @@ sub _timeused {
     return time - $self->time;
 }
 
-# _make_path - recursive make path on google drive for a file
-sub _make_path {
+# _rem_make_path - recursive find or make path on google drive for a new pathfile
+sub _rem_make_path {
     my ( $self, $path_mf ) = @_;
     my $remote_dirs = $self->remote_dirs;
 	my $full_path = $path_mf->to_string;
@@ -102,7 +125,7 @@ sub _make_path {
 	my $did = $remote_dirs->{$locfol->to_string};
 	if (!$did) {
 #			die "$lfs does not exists in ". Dumper  $remote_dirs;
-			$did = $self->_make_path($locfol);
+			$did = $self->_rem_make_path($locfol);
 	}
 	my $basename = $path_mf->basename;
 	say "Create new folder on Google Drive $basename in $locfol $did";
@@ -139,7 +162,7 @@ sub _should_sync {
 	my $rffs = _get_rem_value($remote_file,'fileSize'); #object or hash
 	return 'down' if ! defined $loc_mod;
 	my $filedata = $self->db->query('select * from files_state where loc_pathfile = ?',$loc_pathfile )->hash;
-
+    
 	my $loc_md5_hex;
 
     if (! keys %$filedata) {
@@ -161,12 +184,19 @@ sub _should_sync {
         $filedata = {loc_pathfile=>$loc_pathfile  , loc_size=>$loc_size, loc_mod_epoch=>$loc_mod, loc_md5_hex=>$loc_md5_hex,
             , _get_rem_value($remote_file,'id'), rem_filename =>$self->_decode_remote_string(_get_rem_value($remote_file,'title')), rem_mod_epoch=>$rem_mod, rem_md5_hex=>_get_rem_value($remote_file,'md5Checksum') ,
              act_epoch=>time, 'registered'};
+    } else {
+        # filter looping changes (Changes done by downloading)
+        if ($filedata->act_action =~/down|up/ && $loc_mod < $self->last_end_run_time && $filedata->act_epoch < $self->last_end_run_time && $self->last_end_run_time > $self->old_time) {
+            return 'ok';
+        }
     }
+    
     if (! $loc_mod || ! $loc_size) {
         warn "File does not exists $loc_pathfile ".($loc_mod//'__UNDEF__').'  '. ($loc_size//'__UNDEF__');
         # $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex)',?,?,?,?);
     }
-
+    
+    
     # File not changed on disk
     if ( $loc_size == ($filedata->{loc_size}//-1) && $loc_mod == ($filedata->{loc_mod_epoch}//-1) ) {
     	$loc_md5_hex = $filedata->{loc_md5_hex}//md5_hex(path($local_file)->slurp);
@@ -191,9 +221,8 @@ sub _should_sync {
     return 'ok' if $loc_size == 0 && _get_rem_value($remote_file,'fileSize') == 0;
     return 'down' if $loc_size == 0;
     return 'up'   if _get_rem_value($remote_file,'fileSize') == 0;
-    my $delta_sync_epoch = $self->db->query('select value from replication_state_int where key = \'delta_sync_epoch\'',)->hash;
-    $delta_sync_epoch = ref $delta_sync_epoch ?  $delta_sync_epoch->{value} : 0;
-    if($delta_sync_epoch>$rem_mod && $delta_sync_epoch>$loc_mod) {
+    
+    if($self->old_time>$rem_mod && $self->old_time>$loc_mod ) {
         warn "CONFLICT LOCAL VS REMOTE CHANGED AFTER LAST SYNC $loc_pathfile";
         my $conflict_bck = path($ENV{HOME},'.googledrive','conflict-removed',$loc_pathfile);
         $conflict_bck->dirname->make_path;
@@ -245,6 +274,7 @@ sub _handle_sync{
 	 	   		return;
 	 	   	} else {
 	 	   		say "Should uploade. New file ".decode('UTF8',$local_file);
+	 	   		#my $parent_id = $self->_rem_make_path($local_file) #find or make parent_id
 	 	   		#upload
 	 	 		$s='up';
 	 	   	}
@@ -308,6 +338,7 @@ sub _handle_sync{
 
         }
         die "folder_id is not a scalar\n" . Dumper $folder_id  if ref $folder_id;
+        die if ! $folder_id;
 
         while ($try) {
             eval {
@@ -358,17 +389,6 @@ sub _get_file_object_id_by_localname {
     }
     my $remote_path = path(@path);
     my @ids = $self->net_google_drive_simple->path_resolve(encode('UTF8','/').$remote_path->to_string);
-    # look up in sqlite the cached parent_id?
-#    my $row = $self->db->query('select * from files_state where loc_pathfile = ?',$local_file->to_string)->hash;
-#    if ($row && exists $row->{rem_parent_id} && $row->{rem_parent_id}) {
-#        return $row->{rem_parent_id};
-#    }
-
-    # start from root and work until you hit last dir?
-#    my $object_id='root';
-#    for my $i(@{$self->local_root} .. ($#$local_file - $parent_lockup)) {
-#    	$object_id=$self->net_google_drive_simple->children_by_folder_id($object_id,{},'title="'.$local_file->[$i].'"')->[0]->id;
-#    }
 	return $ids[$parent_lockup]; # root is the last one
 }
 
@@ -404,7 +424,11 @@ sub _process_delta {
         $cache{$lfn} = $r;
     }
     for my $lc_pathfile (keys %lc) {
-
+        if ($lc{$lc_pathfile}{mod}>$self->new_time) {
+            # probably changed by this script. Replicate next run.
+            delete $lc{$lc_pathfile};
+            next;
+        }
         printf encode('UTF8','%s %s != %s || %s != %s'."\n"),decode('UTF8',$lc_pathfile), ($lc{$lc_pathfile}{size}//-1)
             ,($cache{$lc_pathfile}{loc_size}//-1),($lc{$lc_pathfile}{mod}//-1),($cache{$lc_pathfile}{loc_mod_epoch}//-1)
             if $ENV{NMS_DEBUG};
@@ -423,22 +447,15 @@ sub _process_delta {
             $lc{$lc_pathfile}{sync} = 0;
         }
     }
+    say "\nSTART PROCESS CHANGES REMOTE " . $self->_timeused;
     my $gd=$self->net_google_drive_simple;
-    my $cache_last_delta_sync_epoch  = $self->db->query("select value from replication_state_int where key = 'delta_sync_epoch'")->hash;
-    if (ref $cache_last_delta_sync_epoch) {
-        $cache_last_delta_sync_epoch = $cache_last_delta_sync_epoch->{value}
-    } else {
-    	$cache_last_delta_sync_epoch=0;
-#        die "Shall not be runned delta updates if not set delta_sync_epoch";
-    }
-    my $rem_chg_objects = $gd->search({},{page=>0},sprintf("modifiedDate > '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$cache_last_delta_sync_epoch))));
+    my $rem_chg_objects = $gd->search({},{page=>0},sprintf("modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
     print Dumper $rem_chg_objects  if $ENV{NMS_DEBUG};
 
     # process changes
 
     # from remote to local
-    say "START PROCESS CHANGES REMOTE " . $self->_timeused;
-        for my $rem_object (@$rem_chg_objects) {
+    for my $rem_object (@$rem_chg_objects) {
         say "Remote ".$self->_decode_remote_string($rem_object->title);
         #se på å slå opp i cache før construct
         my $lf_name = $self->_construct_path($rem_object);
@@ -449,7 +466,7 @@ sub _process_delta {
     }
 
     # from local to remote
-    say "START PROCESS CHANGES LOCAL " . $self->_timeused;
+    say "\nSTART PROCESS CHANGES LOCAL " . $self->_timeused;
     for my $key (keys %lc) {
         next if ! exists $lc{$key}{sync};
         next if ! $lc{$key}{sync};
@@ -459,7 +476,6 @@ sub _process_delta {
 		my $local_file = path($key);
         $self->_handle_sync($rem_object, $local_file,  $lc{$key}{sync});
     }
-    $self->db->query('replace into replication_state_int(key,value) VALUES(?, ?)',"delta_sync_epoch",$new_delta_sync_epoch);
 }
 
 
