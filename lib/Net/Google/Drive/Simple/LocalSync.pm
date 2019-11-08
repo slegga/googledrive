@@ -207,7 +207,6 @@ sub _should_sync {
 
     if (! $loc_mod || ! $loc_size) {
         warn "File does not exists $loc_pathfile ".($loc_mod//'__UNDEF__').'  '. ($loc_size//'__UNDEF__');
-        # $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex)',?,?,?,?);
     }
 
 
@@ -218,7 +217,6 @@ sub _should_sync {
         printf "File changes on disk .%s$loc_size == %s && %s == %s, %s \n", $loc_size,($filedata->{loc_size}//-1),$loc_mod,($filedata->{loc_mod_epoch}//-1),($filedata->{loc_pathfile}//'__UNDEF__');
         say "calc md5 for changed file ". $local_file->to_string;
     	$loc_md5_hex = md5_hex(path($local_file)->slurp);
-    	#$self->db->query('replace into files_state ( loc_pathfile,loc_size, loc_mod_epoch, loc_tmp_md5_hex ) VALUES(?,?,?,?)',$loc_pathfile,$loc_size,$loc_mod,$loc_md5_hex);
     }
 
 	# filediffer up or down?
@@ -228,10 +226,10 @@ sub _should_sync {
     		$self->db->query('delete from files_state where loc_filepath = ?', $local_file->to_string);
     		return 'cleanup';
     	}
-    	my ($act_epoch, $act_action) = (time,'register');
+    	my ($act_epoch, $act_action) = (0,'register');
 
          my $tmp = $self->db->query('select * from files_state where loc_pathfile = ?', $loc_pathfile);
-         if (ref $tmp) {
+         if (ref $tmp && $tmp->{act_epoch}) {
          	$act_epoch = $tmp->{act_epoch};
          	$act_action = $tmp->{act_action};
          }
@@ -367,34 +365,26 @@ sub _handle_sync{
         die "folder_id is not a scalar\n" . Dumper $folder_id  if ref $folder_id;
         die if ! $folder_id;
 
-#        while ($try) {
-#            eval {
-            	my $rem_file_id;
-            	if ($remote_file) {
-	                $rem_file_id = $self->net_google_drive_simple->file_upload( $loc_pathfile, $folder_id, _get_rem_value($remote_file,'id') );
-	            } else {
-	            	$rem_file_id = $self->net_google_drive_simple->file_upload( $loc_pathfile, $folder_id);
-	            }
-                print "$_;" for( $loc_pathfile,$loc_size,$loc_mod, $md5_hex,
-                    ,$folder_id, $md5_hex, time,'upload');
-                print "\n\n";
-                if ($rem_file_id) {
-                	$self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex, rem_file_id, rem_parent_id, rem_md5_hex, act_epoch,act_action)
-                    VALUES (?,?,?,?,?,?,?,?,?)',$loc_pathfile,$loc_size,$loc_mod, $md5_hex,
-                    , $rem_file_id,$folder_id, $md5_hex,
-                    time,'upload');
-                }
-
-#                1;
-#            } or warn $@;
- #       }
-#                $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex)
-#                  	VALUES (?,?,?,?)',$loc_pathfile ,$loc_size,$loc_mod,$md5_hex);
+       	my $rem_file_id;
+       	if ($remote_file) {
+            $rem_file_id = $self->net_google_drive_simple->file_upload( $loc_pathfile, $folder_id, _get_rem_value($remote_file,'id') );
+        } else {
+        	$rem_file_id = $self->net_google_drive_simple->file_upload( $loc_pathfile, $folder_id);
+        }
+        print "$_;" for( $loc_pathfile,$loc_size,$loc_mod, $md5_hex,
+            ,$folder_id, $md5_hex, time,'upload');
+        print "\n\n";
+        if ($rem_file_id) {
+         	$self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex, rem_file_id, rem_parent_id, rem_md5_hex, act_epoch,act_action)
+             VALUES (?,?,?,?,?,?,?,?,?)',$loc_pathfile,$loc_size,$loc_mod, $md5_hex,
+             , $rem_file_id,$folder_id, $md5_hex,
+             time,'upload');
+        }
     } elsif ( $s eq 'ok' ) {
         print $loc_pathfile," ..ok\n";
-        my ($act_epoch, $act_action) = (time,'register');
+        my ($act_epoch, $act_action) = (0,'register');
         my $tmp = $self->db->query('select * from files_state where loc_pathfile = ?', $loc_pathfile);
-        if (ref $tmp) {
+        if (ref $tmp && $tmp->{act_epoch}) {
         	$act_epoch = $tmp->{act_epoch};
         	$act_action = $tmp->{act_action};
         }
