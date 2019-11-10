@@ -113,8 +113,15 @@ sub _timeused {
 # _rem_make_path - recursive find or make path on google drive for a new pathfile
 sub _rem_make_path {
     my ( $self, $path_mf ) = @_;
-    my $remote_dirs = $self->remote_dirs;
+   my $remote_dirs = $self->remote_dirs;
+	my @ids = $self->net_google_drive_simple->path_resolve($path_mf->to_string);
+	if (@ids) {
+		say join(',',@ids);
+		return $ids[0]  if $ids[0]; # Return correct path if ok
+	}
+
 	my $full_path = $path_mf->to_string;
+
     say "Makepath in: $full_path";
 	my $locfol = $path_mf->dirname;
     if ($locfol->to_string eq $self->local_root->to_string) {
@@ -123,7 +130,7 @@ sub _rem_make_path {
     if ($full_path eq $self->local_root->to_string) {
        	return $self->remote_root_ID;
     }
-        die "Stop loop at $path_mf $full_path". $self->recursive_counter."\n".join("\n", sort keys %$remote_dirs) if $full_path eq '/' || length($full_path) < length($self->local_root->to_string);
+        die "Stop loop at $path_mf $full_path". $self->recursive_counter."\n".join("\n", sort keys %$remote_dirs) if $full_path eq '/' ;
 	my $did = $remote_dirs->{$locfol->to_string};
 	if (!$did) {
 		my @ids = $self->net_google_drive_simple->path_resolve($locfol->to_string);
@@ -189,7 +196,7 @@ sub _should_sync {
         }
         # die "No data cached data for $loc_pathfile";
         say "insert cache $loc_pathfile ";
-        my $loc_md5_hex = md5_hex($loc_pathfile );
+        my $loc_md5_hex = md5_hex($self->_utf8ifing($loc_pathfile) );
         $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex
             , rem_file_id,   rem_filename, rem_mod_epoch, rem_md5_hex, act_epoch, act_action)
             VALUES(?,?,?,?,?, ?,?,?,?,?)'
@@ -264,11 +271,15 @@ sub _should_sync {
 
 sub _utf8ifing {
     my ($self, $malformed_utf8) = @_;
-    $malformed_utf8 =~ s/[\x{9}\x{A}\x{D}\x{20}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/_/;
+    #$malformed_utf8 =~ s/[\x{9}\x{A}\x{D}\x{20}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/_/;
     #$malformed_utf8=~s/Ã.+//;
-
-    my $return = decode('UTF-8', $malformed_utf8, Encode::FB_DEFAULT);
-    $return =~ s/\x{E000}-\x{FFFD}/_/g;
+	my $return;
+    if ($malformed_utf8 =~ /[\xD8\xF8\FFFD]/) {
+    	# no utf8 try latin1
+    	$return = decode('ISO-8859-1', $malformed_utf8);
+    } else {
+ 	    $return = decode('UTF-8', $malformed_utf8, Encode::FB_DEFAULT);
+    }
     return $return;
 }
 
@@ -358,12 +369,16 @@ sub _handle_sync{
 		}
 
         if (! $folder_id) {
-            $folder_id = $self->_rem_make_path($local_file->dirname);# find or make remote folder
+        	my $num_fold_local_root = @{$self->local_root->to_array};
+        	my @tmp = @$local_file[$num_fold_local_root .. $#$local_file];
+			my $rem_file = path('/',@tmp);
+			say "REMOTEFILE.".$rem_file.'-'.join(',',@tmp).'-'.$num_fold_local_root;
+            $folder_id = $self->_rem_make_path($rem_file->dirname);# find or make remote folder
 
         }
         say "Folder_id set to $folder_id";
         die "folder_id is not a scalar\n" . Dumper $folder_id  if ref $folder_id;
-        die if ! $folder_id;
+        die "$local_file" if ! $folder_id;
 
        	my $rem_file_id;
        	if ($remote_file) {
