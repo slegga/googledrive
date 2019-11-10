@@ -130,7 +130,8 @@ sub _rem_make_path {
     if ($full_path eq $self->local_root->to_string) {
        	return $self->remote_root_ID;
     }
-        die "Stop loop at $path_mf $full_path". $self->recursive_counter."\n".join("\n", sort keys %$remote_dirs) if $full_path eq '/' ;
+    #    die "Stop loop at $path_mf $full_path". $self->recursive_counter."\n".join("\n", sort keys %$remote_dirs)
+    return $self->remote_root_ID if $full_path eq '/' ;
 	my $did = $remote_dirs->{$locfol->to_string};
 	if (!$did) {
 		my @ids = $self->net_google_drive_simple->path_resolve($locfol->to_string);
@@ -378,7 +379,7 @@ sub _handle_sync{
         }
         say "Folder_id set to $folder_id";
         die "folder_id is not a scalar\n" . Dumper $folder_id  if ref $folder_id;
-        die "$local_file" if ! $folder_id;
+        die "$local_file no +$folder_id" if ! $folder_id;
 
        	my $rem_file_id;
        	if ($remote_file) {

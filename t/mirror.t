@@ -34,4 +34,5 @@ my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
 );
 ok(1,'ok');
 $google_docs->mirror();
+
 done_testing;
