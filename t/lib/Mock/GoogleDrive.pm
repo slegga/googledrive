@@ -4,7 +4,22 @@ use Mojo::File 'path';
 use Digest::MD5 'md5_base64';
 has remote_root => sub {path('t/remote')};
 has remote_root_id => 'rootid';
-has 'file_ids'; # TODO Regnut md5_base64 for alle kataloger og filer i remote fra stifillnavn
+has file_ids => sub {
+	my $self = shift;
+	my @remote_paths = $self->remote_root->kist_tree(dir=>1);
+	my $return={};
+	for my $path(@remote_paths) {
+		$return->{md5_base64($path)} = {
+			id => md5_base64($path),
+			remote_path => $path,
+		};
+	}
+	$return->{md5_base64('/')} = {
+		id => md5_base64('/'),
+		remote_path => '/',
+	};
+	return $return;
+}; # TODO Regnut md5_base64 for alle kataloger og filer i remote fra stifillnavn
 
 sub children {
 	my $self = shift;
@@ -31,9 +46,10 @@ sub path_resolve {
 
 sub file_metadata {
 	my $self = shift;
+	my $file_id = shift;
 	warn 'file_metada '. join(',',@_);
-	return;
-#	return 'file_metadata LEGG INN NOE LURT HER'
+
+	return $self->file_ids->{$file_id};
 }
 
 sub file_upload {
