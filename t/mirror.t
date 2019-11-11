@@ -10,9 +10,10 @@ use lib "$FindBin::Bin/lib";
 use Net::Google::Drive::Simple::LocalSync;
 use Mock::GoogleDrive;
 use Mojo::SQLite;
+
 my $testdbname = 't/data/temp-sqlite.db';
-`rm t/remote`;
-mkdir('t/remote');
+`rm -r t/remote/*`;
+`echo remote-file >t/remote/remote-file.txt`;
 
 unlink($testdbname) if -f $testdbname;
 
@@ -22,11 +23,7 @@ $sql->migrations->from_file('migrations/files_state.sql')->migrate;
 
 
 #$sql4->auto_migrate(1)->migrations->name('files_state')->from_data;
-
 my $home = path('t/local');
-# requires a ~/.google-drive.yml file containing an access token,
-# see documentation of Net::Google::Drive::Simple
-
 
 my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
     remote_root => path('/'),

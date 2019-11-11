@@ -104,6 +104,10 @@ has last_end_run_time => sub {
 
 =head1 METHODS
 
+=head2 mirror
+
+Start syncronize local tree and remote tree on google drive.
+Jump over google docs files.
 
 =cut
 
@@ -376,7 +380,15 @@ sub _handle_sync{
         my $tmpfile = "/tmp/"._get_rem_value($remote_file,'md5Checksum');
         $self->net_google_drive_simple->download( $remote_file, $tmpfile );
         if (-s $tmpfile) {
+			if (! -e $local_file->dirname) {
+				$local_file->dirname->make_path;
+			}
             move($tmpfile, $loc_pathfile);
+			 if (-f $loc_pathfile) {
+ 	            say "success download $loc_pathfile";
+			 } else {
+			 	die "ERROR DOWNLOAD $loc_pathfile";
+			 }
         } else {
         	say "ERROR: file not found or empty $tmpfile";
             $self->db->query('replace into files_state (loc_pathfile,loc_size,act_epoch,act_action,rem_file_id,rem_md5_hex,rem_size)
@@ -541,7 +553,7 @@ sub _process_delta {
     	next if ! $rem_object->can('downloadUrl'); # ignore google documents
         say "Remote ".$self->_decode_remote_string($rem_object->title);
         #se på å slå opp i cache før construct
-        my $lf_name = $self->_construct_path($rem_object);
+        my $lf_name = $self->local_construct_path($rem_object);
         my $local_file = path($lf_name);
         #TODO $self->db->query(); replace into files_state (rem_file_id,loc_pathfile,rem_md5_hex)
         my $sync = $self->_should_sync($rem_object, $local_file);
@@ -567,11 +579,16 @@ sub _process_delta {
 
 
 
-# construct local path
-sub _construct_path{
+
+=head2 local_construct_path
+
+Ensure the local path exists
+
+=cut
+
+sub local_construct_path {
     my $self = shift;
     my $rem_object = shift;
-    die if ! defined $rem_object;
     my $i =0;
     my $parent_id = $rem_object->parents->[0]->{id};
     my @r=($self->_decode_remote_string($rem_object->title));
