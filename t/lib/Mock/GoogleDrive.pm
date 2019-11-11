@@ -47,6 +47,7 @@ sub children {
 sub search{
 	my $self = shift;
 	warn 'search '. join(',',@_);
+	die "No support for search: ". $_[0];
 	return []; #'search LEGG INN NOE LURT HER'
 }
 sub path_resolve {
