@@ -6,12 +6,16 @@ has remote_root => sub {path('t/remote')};
 has remote_root_id => 'rootid';
 has file_ids => sub {
 	my $self = shift;
-	my @remote_paths = $self->remote_root->kist_tree(dir=>1);
+	my @remote_paths = $self->remote_root->list_tree({dir=>1});
 	my $return={};
+	my $num_fold_local_root = @{$self->remote_root->to_array};
 	for my $path(@remote_paths) {
-		$return->{md5_base64($path)} = {
-			id => md5_base64($path),
-			remote_path => $path,
+       	my @tmp = @$path[$num_fold_local_root .. $#$path];
+		my $rem_pathfile = path('/',@tmp);
+
+		$return->{md5_base64("$rem_pathfile")} = {
+			id => md5_base64("$rem_pathfile"),
+			remote_path => "$rem_pathfile",
 		};
 	}
 	$return->{md5_base64('/')} = {

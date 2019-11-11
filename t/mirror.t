@@ -11,6 +11,8 @@ use Net::Google::Drive::Simple::LocalSync;
 use Mock::GoogleDrive;
 use Mojo::SQLite;
 my $testdbname = 't/data/temp-sqlite.db';
+`rm t/remote`;
+mkdir('t/remote');
 
 unlink($testdbname) if -f $testdbname;
 
@@ -34,5 +36,5 @@ my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
 );
 ok(1,'ok');
 $google_docs->mirror();
-
+ok (-f 't/remote/test.txt','local file is exported');
 done_testing;
