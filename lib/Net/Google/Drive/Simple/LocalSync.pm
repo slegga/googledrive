@@ -110,8 +110,13 @@ sub _timeused {
     return time - $self->time;
 }
 
-# _rem_make_path - recursive find or make path on google drive for a new pathfile
-sub _rem_make_path {
+=head2 remote_make_path
+
+Recursive find or make path on google drive for a new pathfile
+
+=cut
+
+sub remote_make_path {
     my ( $self, $path_mf ) = @_;
    my $remote_dirs = $self->remote_dirs;
 	my @ids = $self->net_google_drive_simple->path_resolve($path_mf->to_string);
@@ -123,15 +128,16 @@ sub _rem_make_path {
 	my $full_path = $path_mf->to_string;
 
     say "Makepath in: $full_path";
-	my $locfol = $path_mf->dirname;
-    if ($locfol->to_string eq $self->local_root->to_string) {
-    	return $self->remote_root_ID;
-    }
+
+    return $self->remote_root_ID if $full_path eq '/' ;
     if ($full_path eq $self->local_root->to_string) {
        	return $self->remote_root_ID;
     }
+	my $locfol = $path_mf->dirname;
+    if ($locfol->to_string eq $self->local_root->to_string || $locfol->to_string eq '/') {
+    	return $self->remote_root_ID;
+    }
     #    die "Stop loop at $path_mf $full_path". $self->recursive_counter."\n".join("\n", sort keys %$remote_dirs)
-    return $self->remote_root_ID if $full_path eq '/' ;
 	my $did = $remote_dirs->{$locfol->to_string};
 	if (!$did) {
 		my @ids = $self->net_google_drive_simple->path_resolve($locfol->to_string);
@@ -142,7 +148,7 @@ sub _rem_make_path {
 	}
 	if (!$did) {
 #			die "$lfs does not exists in ". Dumper  $remote_dirs;
-			$did = $self->_rem_make_path($locfol);
+			$did = $self->remote_make_path($locfol);
 	}
 	my $basename = $path_mf->basename;
 	#my $parent_obj = $self->net_google_drive_simple->data_factory($self->net_google_drive_simple->file_metadata($did));
@@ -292,7 +298,7 @@ sub _utf8ifing {
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
     my $row;
-    say "w ",$local_file->to_string.'  '. ($remote_file ? $self->_decode_remote_string($remote_file->title):'__UNDEF__').' folder_id:'.($folder_id//'__UNDEF__');
+    say "w ".$self->_utf8ifing($local_file->to_string).' &  '. ($remote_file ? decode('UTF8',$remote_file->title) : '__UNDEF__').' folder_id:'.($folder_id//'__UNDEF__');
     my $s; # sync option chosed
     if (! defined $remote_file) {
     	# deleted on server try to find new remote_file_object
@@ -308,8 +314,6 @@ sub _handle_sync{
 	 	   		return;
 	 	   	} else {
 	 	   		say "Should uploade. New file ".decode('UTF8',$local_file);
-	 	   		#my $parent_id = $self->_rem_make_path($local_file) #find or make parent_id
-	 	   		#upload
 	 	 		$s='up';
 	 	   	}
  	   	}
@@ -323,7 +327,7 @@ sub _handle_sync{
     #say Dumper $remote_file;
     my $remote_file_size = $remote_file ? _get_rem_value( $remote_file, 'fileSize') : undef;
     my $loc_pathfile = $local_file->to_string;
-    print 'x ',$loc_pathfile,"\n";
+    print 'x ',$self->_utf8ifing($loc_pathfile),"\n";
     die "NO LOCAL FILE" if ! $loc_pathfile;
     $s ||= $self->_should_sync( $remote_file, $local_file );
     my ($loc_size, $loc_mod) = (stat($loc_pathfile))[7,9];
@@ -374,7 +378,7 @@ sub _handle_sync{
         	my @tmp = @$local_file[$num_fold_local_root .. $#$local_file];
 			my $rem_file = path('/',@tmp);
 			say "REMOTEFILE.".$rem_file.'-'.join(',',@tmp).'-'.$num_fold_local_root;
-            $folder_id = $self->_rem_make_path($rem_file->dirname);# find or make remote folder
+            $folder_id = $self->remote_make_path($rem_file->dirname);# find or make remote folder
 
         }
         say "Folder_id set to $folder_id";
