@@ -2,6 +2,8 @@ package Mock::GoogleDrive;
 use Mojo::Base -base;
 use Mojo::File 'path';
 use Digest::MD5 'md5_base64';
+use DateTime::Format::RFC3339;
+
 has remote_root => sub {path('t/remote')};
 has remote_root_id => 'rootid';
 has file_ids => sub {
@@ -46,8 +48,26 @@ sub children {
 }
 sub search{
 	my $self = shift;
+	my (undef,undef,$search) = @_;
 	warn 'search '. join(',',@_);
-	return []; #'search LEGG INN NOE LURT HER'
+	my @return;
+	if ( $search =~ /^(\w+)\s*>\*\'([\w\-\:]+)\'\s*[aA][nN][dD]\s*(\w+)\s*<\s*\'([\w\-\:]+)\'$/) {
+		my ($key1,$value2,$key2,$value2) =($1,$2,$3,$4);
+		my $dateparser =DateTime::Format::RFC3339->new();
+		if ($key1 =~/Date$/ && $key2 =~/Date$/) {
+			$value1 = $dateparser->parse_datetime( $value1 )->epoch;
+			$value2 = $dateparser->parse_datetime( $value2 )->epoch;
+
+			for my $fmd (values %{$self->file_ids}) {
+				if (exists $fmd->{$key1} && $dateparser->parse_datetime( $fmd->{$key1} )->epoch > $value1
+				&& exists  $fmd->{$key1} && $dateparser->parse_datetime( $fmd->{$key2} )->epoch < $value2) {
+					push @return, $file_metadata
+				}
+			}
+			return @return;
+		}
+	}
+	die 'No handling of search. Please add regexp to handle : '.$search;
 }
 sub path_resolve {
 	my $self = shift;

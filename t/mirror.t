@@ -11,8 +11,7 @@ use Net::Google::Drive::Simple::LocalSync;
 use Mock::GoogleDrive;
 use Mojo::SQLite;
 my $testdbname = 't/data/temp-sqlite.db';
-`rm t/remote`;
-mkdir('t/remote');
+`rm t/remote/*`;
 
 unlink($testdbname) if -f $testdbname;
 
