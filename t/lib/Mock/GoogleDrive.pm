@@ -1,7 +1,7 @@
 package Mock::GoogleDrive;
 use Mojo::Base -base;
 use Mojo::File 'path';
-use Digest::MD5 'md5_base64';
+use Digest::MD5 qw/md5_base64 md5_hex/ ;
 use DateTime;
 use DateTime::Format::RFC3339;
 
@@ -20,8 +20,8 @@ has file_ids => sub {
 		my ($key,$value) = $self->_return_new_file_metadata($rem_pathfile);
 		$return->{$key} = $value;
 		}
-	my ($key,$value) = $self->_return_new_file_metadata('/');
-	$return->{$key} = $value;
+	my ($key,$value) = $self->_return_new_file_metadata( '/' );
+	$return->{$key} = $value if $key;
 	return $return;
 }; # TODO Regnut md5_base64 for alle kataloger og filer i remote fra stifillnavn
 
@@ -30,14 +30,24 @@ has file_ids => sub {
 sub _return_new_file_metadata {
 	my $self = shift;
 	my $remote_file = shift;
-	my $key = md5_base64("$remote_file");
+	return if ! $remote_file;
 	my $file = path($remote_file);
+	my $key = md5_base64($remote_file);
+	my $parent;
+	if ($remote_file eq '/') {
+		$parent = undef;
+	} else {
+		$parent = md5_base64($file->dirname->to_string);
+	}
 	my $value = {
 			id => "$key",
 			remote_path => "$remote_file",
 			modifiedDate => $self->dateformatter->format_datetime(DateTime->from_epoch(epoch => $file->stat->mtime)),
 			downloadUrl => 'x',
 			title => $file->basename,
+			parents => [{id => $parent}],
+			fileSize => $file->stat->size,
+			md5Checksum => md5_hex($remote_file),
 		};
 	return ($key,$value);
 }
@@ -103,7 +113,7 @@ sub file_upload {
 	my $filename = $local_file->basename;
 	my $upload_path = $self->remote_root->child($filename);
 	$local_file->copy_to($upload_path->to_string);
-	my ($key,$value) = $self->_return_new_file_metadata;
+	my ($key,$value) = $self->_return_new_file_metadata($upload_path->to_string);
 	my $file_ids = $self->file_ids;
 	$file_ids->{$key} = $value;
 	$self->file_ids($file_ids);

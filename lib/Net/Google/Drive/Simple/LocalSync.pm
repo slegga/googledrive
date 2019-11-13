@@ -196,7 +196,7 @@ sub remote_make_path {
 	#my $parent_obj = $self->net_google_drive_simple->data_factory($self->net_google_drive_simple->file_metadata($did));
 	my $children = $self->net_google_drive_simple->children_by_folder_id($did);
 	for my $child(@$children) {
-		return $did if $child->title eq $basename;
+		return $did if _get_rem_value($child,'title') eq $basename;
 	}
 	say "Create new folder on Google Drive: $basename in $locfol $did";
 	$did = $self->net_google_drive_simple->folder_create( $basename,  $did);
@@ -211,7 +211,11 @@ sub _get_rem_value {
 	my $key=shift;
 #	say ref $remote_file;
 	confess Dumper $remote_file if ( ref $remote_file eq 'ARRAY' || ! ref $remote_file);
-	return $remote_file->{$key} if ref $remote_file eq 'HASH' && exists $remote_file->{$key};
+	if (ref $remote_file eq 'HASH') {
+		return $remote_file->{$key}  if exists $remote_file->{$key};
+		die "Missing key $key";
+		return  if exists $remote_file->{$key};
+		}
 	return $remote_file->$key if $remote_file->can($key);
 	print STDERR $key.."  ".ref($remote_file)."\n";
 	warn Dumper $remote_file;
@@ -340,7 +344,7 @@ sub _utf8ifing {
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
     my $row;
-    say "w ".$self->_utf8ifing($local_file->to_string).' &  '. ($remote_file ? decode('UTF8',$remote_file->title) : '__UNDEF__').' folder_id:'.($folder_id//'__UNDEF__');
+    say "w ".$self->_utf8ifing($local_file->to_string).' &  '. ($remote_file ? decode('UTF8', _get_rem_value($remote_file, 'title')) : '__UNDEF__').' folder_id:'.($folder_id//'__UNDEF__');
     my $s; # sync option chosed
     if (! defined $remote_file) {
     	# deleted on server try to find new remote_file_object
@@ -360,11 +364,10 @@ sub _handle_sync{
 	 	   	}
  	   	}
     }
-    if (ref $remote_file eq 'HASH') {
-    	 my $tmp = $self->net_google_drive_simple->data_factory($remote_file);
-    	 $remote_file =$tmp if (ref $tmp); #success
-
-    }
+#    if (ref $remote_file eq 'HASH') {
+#    	 my $tmp = $self->net_google_drive_simple->data_factory($remote_file);
+#    	 $remote_file =$tmp if (ref $tmp); #success
+#    }
 
     #say Dumper $remote_file;
     my $remote_file_size = $remote_file ? _get_rem_value( $remote_file, 'fileSize') : undef;
@@ -590,8 +593,8 @@ sub local_construct_path {
     my $self = shift;
     my $rem_object = shift;
     my $i =0;
-    my $parent_id = $rem_object->parents->[0]->{id};
-    my @r=($self->_decode_remote_string($rem_object->title));
+    my $parent_id = _get_rem_value($rem_object,'parents')->[0]->{id};
+    my @r=$self->_decode_remote_string(_get_rem_value($rem_object,'title'));
 
     while (1) {
         $i++;

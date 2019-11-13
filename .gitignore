@@ -1,5 +1,5 @@
 *.ptkdb
 *.bak
-t/local/
-t/remote/
-t/data/
+/t/local/
+/t/remote/
+/t/data/

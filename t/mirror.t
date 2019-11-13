@@ -34,4 +34,5 @@ my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
 ok(1,'ok');
 $google_docs->mirror();
 ok (-f 't/remote/test.txt','local file is exported');
+ok (-f 't/local/remote-file.txt','remote file is imported');
 done_testing;
