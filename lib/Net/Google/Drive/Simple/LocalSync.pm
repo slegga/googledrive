@@ -344,7 +344,7 @@ sub _utf8ifing {
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
     my $row;
-    say "w ".$self->_utf8ifing($local_file->to_string).' &  '. ($remote_file ? decode('UTF8', _get_rem_value($remote_file, 'title')) : '__UNDEF__').' folder_id:'.($folder_id//'__UNDEF__');
+    say "w $local_file  &  ". ($remote_file ? decode('UTF8', _get_rem_value($remote_file, 'title')) : '__UNDEF__').' folder_id:'.($folder_id//'__UNDEF__');
     my $s; # sync option chosed
     if (! defined $remote_file) {
     	# deleted on server try to find new remote_file_object
