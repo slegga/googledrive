@@ -11,13 +11,11 @@ use Net::Google::Drive::Simple::LocalSync;
 use Mock::GoogleDrive;
 use Mojo::SQLite;
 
-my $testdbname = 't/data/temp-sqlite.db';
+#my $testdbname = 't/data/temp-sqlite.db';
 `rm -r t/remote/*`;
 `echo remote-file >t/remote/remote-file.txt`;
 
-unlink($testdbname) if -f $testdbname;
-
-my $sql = Mojo::SQLite->new($testdbname);
+my $sql = Mojo::SQLite->new()->from_filename(':memory:');
 
 $sql->migrations->from_file('migrations/files_state.sql')->migrate;
 
@@ -29,7 +27,7 @@ my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
     remote_root => path('/'),
     local_root  => $home,
     net_google_drive_simple => Mock::GoogleDrive->new,
-    dbfile => $testdbname,
+    sqlite =>      $sql,
 );
 ok(1,'ok');
 $google_docs->mirror();
