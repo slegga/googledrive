@@ -161,7 +161,7 @@ Recursive find or make path on google drive for a new pathfile
 sub remote_make_path {
     my ( $self, $path_mf ) = @_;
    my $remote_dirs = $self->remote_dirs;
-	my @ids = $self->net_google_drive_simple->path_resolve($path_mf->to_string);
+	my @ids = $self->path_resolveu($path_mf->to_string);
 	if (@ids) {
 		say join(',',@ids);
 		return $ids[0]  if $ids[0]; # Return correct path if ok
@@ -182,7 +182,7 @@ sub remote_make_path {
     #    die "Stop loop at $path_mf $full_path". $self->recursive_counter."\n".join("\n", sort keys %$remote_dirs)
 	my $did = $remote_dirs->{$locfol->to_string};
 	if (!$did) {
-		my @ids = $self->net_google_drive_simple->path_resolve($locfol->to_string);
+		my @ids = $self->path_resolveu($locfol->to_string);
 		if (@ids) {
 			$did= $ids[0] ;
 			$remote_dirs->{$locfol->to_string} = $did;
@@ -485,7 +485,7 @@ sub _get_file_object_id_by_local_file {
     }
    warn "ERROR: Could not find remote path for ".$local_file if ! @path;
     my $remote_path = path(@path);
-    my @ids = $self->net_google_drive_simple->path_resolve(encode('UTF8','/').$remote_path->to_string);
+    my @ids = $self->path_resolveu(encode('UTF8','/').$remote_path->to_string);
 	return $ids[$parent_lockup]; # root is the last one
 }
 
@@ -619,6 +619,73 @@ sub local_construct_path {
 }
 
 
+=head2 path_resolveu
+
+Reimplementation of Net::Google::Drive::Simple::path_resolve
+Fill in with undef if not found.
+
+=cut
+
+###########################################
+sub path_resolveu {
+###########################################
+    my( $self, $path, $search_opts ) = @_;
+
+    $search_opts = {} if !defined $search_opts;
+
+    my @parts = split '/', $path;
+    my @ids   = ();
+    my $parent = $parts[0] = $self->remote_root_ID;
+#    DEBUG "Parent: $parent";
+
+    my $folder_id = shift @parts;
+    push @ids, $folder_id;
+
+    PART: for my $part ( @parts ) {
+
+ #       DEBUG "Looking up part $part (folder_id=$folder_id)";
+		if (! defined $folder_id) {
+			unshift @ids, undef;
+			next;
+		}
+        my $children = $self->net_google_drive_simple->children_by_folder_id( $folder_id,
+          { maxResults    => 100, # path resolution maxResults is different
+          },
+          { %$search_opts, title => $part },
+        );
+
+        if( ! defined $children ) {
+            unshift @ids, undef;
+            next;
+        }
+
+        for my $child ( @$children ) {
+#            DEBUG "Found child ", $child->title();
+            if( _get_rem_value($child,'title') eq $part ) {
+                $folder_id = $child->id();
+                unshift @ids, $folder_id;
+                $parent = $folder_id;
+ #               DEBUG "Parent: $parent";
+                next PART;
+            }
+        }
+
+		#not found if got here
+       unshift @ids, undef;
+
+#        my $msg = "Child $part not found";
+#        $self->error( $msg );
+#        ERROR $msg;
+#        return undef;
+    }
+
+    if( @ids == 1 ) {
+          # parent of root is undef
+        return( undef, @ids );
+    }
+
+    return( @ids );
+}
 
 
 

@@ -17,37 +17,39 @@ has file_ids => sub {
 
        	my @tmp = @$path[$num_fold_local_root .. $#$path];
 		my $rem_pathfile = path('/',@tmp);
-		my ($key,$value) = $self->_return_new_file_metadata($rem_pathfile);
+		my ($key,$value) = $self->_return_new_file_metadata_from_filename($rem_pathfile->to_string);
 		$return->{$key} = $value;
 		}
-	my ($key,$value) = $self->_return_new_file_metadata( '/' );
-	$return->{$key} = $value if $key;
+	my ($key,$value) = $self->_return_new_file_metadata_from_filename( '/' );
+	$return->{$key} = $value;
 	return $return;
 }; # TODO Regnut md5_base64 for alle kataloger og filer i remote fra stifillnavn
 
 
 #		push @$return,$return $self->_return_new_file_metadata($rem_pathfile);
-sub _return_new_file_metadata {
+sub _return_new_file_metadata_from_filename {
 	my $self = shift;
-	my $remote_file = shift;
-	return if ! $remote_file;
-	my $file = path($remote_file);
-	my $key = md5_base64($remote_file);
+	my $remote_filename = shift;
+	return if ! $remote_filename;
+	my $file = path($remote_filename);
+	my $key = md5_base64($remote_filename);
 	my $parent;
-	if ($remote_file eq '/') {
+	if ($remote_filename eq '/') {
+		$key = $self->remote_root_id;
 		$parent = undef;
 	} else {
 		$parent = md5_base64($file->dirname->to_string);
 	}
 	my $value = {
 			id => "$key",
-			remote_path => "$remote_file",
+			remote_pathname => $remote_filename,
+			real_path => $remote_filename eq '/'  ? $self->remote_root->realpath : $file->realpath,
 			modifiedDate => $self->dateformatter->format_datetime(DateTime->from_epoch(epoch => $file->stat->mtime)),
 			downloadUrl => 'x',
 			title => $file->basename,
 			parents => [{id => $parent}],
 			fileSize => $file->stat->size,
-			md5Checksum => md5_hex($remote_file),
+			md5Checksum => md5_hex($remote_filename),
 		};
 	return ($key,$value);
 }
@@ -60,8 +62,37 @@ sub children {
 	$parent_id = $self->remote_root_id if $_[0] eq '/';
 	return ($file_id,$parent_id) if wantarray;
 	return $file_id;
-
 }
+
+sub _get_remote_path_from_full_path_file {
+	...;
+#	return
+}
+
+sub children_by_folder_id {
+	my( $self, $folder_id, $opts, $search_opts ) = @_;
+	my $remote_dir = $self->file_ids->{$folder_id}->{real_path};
+	if (! defined $remote_dir) {
+		warn "try to get $folder_id -> real_path";
+		my $file_ids = $self->file_ids;
+		die Dumper $file_ids;
+	}
+	my @return;
+	for my $f( $remote_dir->list_tree) {
+		my $remote_dir_name = $self->get_remote_name_from_full_path($f);
+		push @return, $self->file_ids->{md5_base64($remote_dir_name)};
+	}
+	warn 'children_by_folder_id '. join(',',@_);
+	return \@return;
+}
+
+sub get_remote_name_from_full_path{
+	my ($self,$full_path) = @_;
+	my $root_num_of_dirs = @{$self->remote_root};
+	my $return = path(@$full_path[$root_num_of_dirs .. $#$full_path]);
+	return $return->to_string;
+}
+
 sub search{
 	my $self = shift;
 	my ($c,$d,$search) = @_;
