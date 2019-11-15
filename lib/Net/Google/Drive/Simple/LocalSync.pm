@@ -163,7 +163,7 @@ sub remote_make_path {
    my $remote_dirs = $self->remote_dirs;
 	my @ids = $self->path_resolveu($path_mf->to_string);
 	if (@ids) {
-		say join(',',@ids);
+		say join(',',map{$_//'__UNDEF__'} @ids);
 		return $ids[0]  if $ids[0]; # Return correct path if ok
 	}
 

@@ -81,10 +81,12 @@ sub children_by_folder_id {
 		die Dumper $file_ids;
 	}
 	my @return;
-	for my $f( $remote_dir->list_tree) {
+	for my $f(@{  $remote_dir->list_tree->to_array }) {
 		my $remote_dir_name = $self->get_remote_name_from_full_path($f);
-		my $tmp = $self->file_ids->{md5_base64($remote_dir_name)};
-		die "Not found $remote_dir_name in file_ids ".md5_base64($remote_dir_name).Dumper $self->file_ids if ! defined $tmp ;
+		my $file_id = md5_base64($remote_dir_name);
+		$file_id = $self->remote_root_id if $remote_dir_name eq '/';
+		my $tmp = $self->file_ids->{$folder_id};
+		die "Not found $remote_dir_name in file_ids $file_id $folder_id\n".Dumper $self->file_ids if ! defined $tmp ;
 		push @return, $tmp;
 	}
 	warn 'children_by_folder_id '. join(',',@_);
@@ -93,9 +95,7 @@ sub children_by_folder_id {
 
 sub get_remote_name_from_full_path{
 	my ($self,$full_path) = @_;
-	my $root_num_of_dirs = @{$self->remote_root};
-	my $return = path(@$full_path[$root_num_of_dirs .. $#$full_path]);
-	return $return->to_string;
+	return substr($full_path->to_string, length($self->remote_root->realpath->to_string) );
 }
 
 sub search{
@@ -149,7 +149,7 @@ sub file_upload {
 	my $filename = $local_file->basename;
 	my $upload_path = $self->remote_root->child($filename);
 	$local_file->copy_to($upload_path->to_string);
-	my ($key,$value) = $self->_return_new_file_metadata($upload_path->to_string);
+	my ($key,$value) = $self->_return_new_file_metadata_from_filename($upload_path->to_string);
 	my $file_ids = $self->file_ids;
 	$file_ids->{$key} = $value;
 	$self->file_ids($file_ids);
