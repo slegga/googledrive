@@ -8,18 +8,19 @@ use Carp qw/confess/;
 use Data::Dumper;
 
 has remote_root => sub {path('t/remote')};
+has remote_root_length => sub {length(shift->remote_root->to_string)};
 has remote_root_id => 'rootid';
 has dateformatter => sub { DateTime::Format::RFC3339->new() };
 has file_ids => sub {
 	my $self = shift;
-	my @remote_paths = $self->remote_root->list_tree({dir=>1});
+	my @remote_paths = @{ $self->remote_root->list_tree({dir=>1})->to_array };
 	my $return={};
 	my $num_fold_local_root = @{$self->remote_root->to_array};
 	for my $path(@remote_paths) {
+		my $remote_pathname = substr($path->to_string,$self->remote_root_length);
 
-       	my @tmp = @$path[$num_fold_local_root .. $#$path];
-		my $rem_pathfile = path('/',@tmp);
-		my ($key,$value) = $self->_return_new_file_metadata_from_filename("$rem_pathfile");
+#		my $rem_pathfile = path('/',@tmp);
+		my ($key,$value) = $self->_return_new_file_metadata_from_filename($remote_pathname);
 		$return->{$key} = $value;
 		}
 	my ($key,$value) = $self->_return_new_file_metadata_from_filename( '/' );
@@ -34,7 +35,8 @@ sub _return_new_file_metadata_from_filename {
 	my $remote_filename = shift;
 	return if ! $remote_filename;
 	confess "Expect an string $remote_filename" if ref $remote_filename;
-	my $file = path($remote_filename);
+	my $file = path($self->remote_root->to_string,$remote_filename);
+	die "file is undef $remote_filename" if ! defined $file;
 	my $key = md5_base64($remote_filename);
 	my $parent;
 	if ($remote_filename eq '/') {
@@ -43,15 +45,18 @@ sub _return_new_file_metadata_from_filename {
 	} else {
 		$parent = md5_base64($file->dirname->to_string);
 	}
+	my $stat = $file->stat;
+	die "undef stat $remote_filename".($stat//'__UNDEF_') if !ref $stat;
+
 	my $value = {
-			id => "$key",
+			id => $key,
 			remote_pathname => $remote_filename,
 			real_path => $remote_filename eq '/'  ? $self->remote_root->realpath : $file->realpath,
 			modifiedDate => $self->dateformatter->format_datetime(DateTime->from_epoch(epoch => $file->stat->mtime)),
-			downloadUrl => 'x',
+			downloadUrl => $key,
 			title => $file->basename,
 			parents => [{id => $parent}],
-			fileSize => $file->stat->size,
+			fileSize => $stat->size,
 			md5Checksum => md5_hex($remote_filename),
 		};
 	return ($key,$value);
@@ -111,8 +116,11 @@ sub search{
 			$value2 = $dateparser->parse_datetime( $value2 )->epoch;
 
 			for my $fmd (values %{$self->file_ids}) {
-				if (exists $fmd->{$key1} && $dateparser->parse_datetime( $fmd->{$key1} )->epoch > $value1
-				&& exists  $fmd->{$key1} && $dateparser->parse_datetime( $fmd->{$key2} )->epoch < $value2) {
+				next if ! exists $fmd->{$key1};
+				next if ! exists $fmd->{$key2};
+				my $rowval1 = $dateparser->parse_datetime( $fmd->{$key1} )->epoch;
+				my $rowval2 = $dateparser->parse_datetime( $fmd->{$key2} )->epoch;
+				if ( $rowval1 > $value1	&& $rowval2 <= $value2) {
 					push @return, $fmd;
 				}
 			}
@@ -154,5 +162,12 @@ sub file_upload {
 	$file_ids->{$key} = $value;
 	$self->file_ids($file_ids);
 	return $key;
+}
+
+sub download {
+	warn 'download '. join(',',@_);
+	my( $self, $url, $local_file ) = @_;
+	say Dumper $url;
+	...;
 }
 1;
