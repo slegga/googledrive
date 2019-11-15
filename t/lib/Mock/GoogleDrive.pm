@@ -5,6 +5,7 @@ use Digest::MD5 qw/md5_base64 md5_hex/ ;
 use DateTime;
 use DateTime::Format::RFC3339;
 use Carp qw/confess/;
+use Data::Dumper;
 
 has remote_root => sub {path('t/remote')};
 has remote_root_id => 'rootid';
@@ -18,7 +19,7 @@ has file_ids => sub {
 
        	my @tmp = @$path[$num_fold_local_root .. $#$path];
 		my $rem_pathfile = path('/',@tmp);
-		my ($key,$value) = $self->_return_new_file_metadata("$rem_pathfile");
+		my ($key,$value) = $self->_return_new_file_metadata_from_filename("$rem_pathfile");
 		$return->{$key} = $value;
 		}
 	my ($key,$value) = $self->_return_new_file_metadata_from_filename( '/' );
@@ -32,7 +33,7 @@ sub _return_new_file_metadata_from_filename {
 	my $self = shift;
 	my $remote_filename = shift;
 	return if ! $remote_filename;
-	confess "Expect an string $remote_file" if ref $remote_file;
+	confess "Expect an string $remote_filename" if ref $remote_filename;
 	my $file = path($remote_filename);
 	my $key = md5_base64($remote_filename);
 	my $parent;
@@ -82,7 +83,9 @@ sub children_by_folder_id {
 	my @return;
 	for my $f( $remote_dir->list_tree) {
 		my $remote_dir_name = $self->get_remote_name_from_full_path($f);
-		push @return, $self->file_ids->{md5_base64($remote_dir_name)};
+		my $tmp = $self->file_ids->{md5_base64($remote_dir_name)};
+		die "Not found $remote_dir_name in file_ids ".md5_base64($remote_dir_name).Dumper $self->file_ids if ! defined $tmp ;
+		push @return, $tmp;
 	}
 	warn 'children_by_folder_id '. join(',',@_);
 	return \@return;

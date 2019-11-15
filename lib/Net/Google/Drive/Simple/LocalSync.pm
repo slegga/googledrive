@@ -648,6 +648,8 @@ sub path_resolveu {
 			unshift @ids, undef;
 			next;
 		}
+#		my $tmp = $self->net_google_drive_simple->file_metadata($folder_id);
+		say "part $part ".($folder_id//'__UNDEF__');#. Dumper $tmp;
         my $children = $self->net_google_drive_simple->children_by_folder_id( $folder_id,
           { maxResults    => 100, # path resolution maxResults is different
           },
@@ -661,6 +663,7 @@ sub path_resolveu {
 
         for my $child ( @$children ) {
 #            DEBUG "Found child ", $child->title();
+			next if ! defined $child;
             if( _get_rem_value($child,'title') eq $part ) {
                 $folder_id = $child->id();
                 unshift @ids, $folder_id;
