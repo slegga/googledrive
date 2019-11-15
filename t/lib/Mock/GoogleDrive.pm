@@ -4,6 +4,7 @@ use Mojo::File 'path';
 use Digest::MD5 qw/md5_base64 md5_hex/ ;
 use DateTime;
 use DateTime::Format::RFC3339;
+use Carp qw/confess/;
 
 has remote_root => sub {path('t/remote')};
 has remote_root_id => 'rootid';
@@ -17,7 +18,7 @@ has file_ids => sub {
 
        	my @tmp = @$path[$num_fold_local_root .. $#$path];
 		my $rem_pathfile = path('/',@tmp);
-		my ($key,$value) = $self->_return_new_file_metadata($rem_pathfile);
+		my ($key,$value) = $self->_return_new_file_metadata("$rem_pathfile");
 		$return->{$key} = $value;
 		}
 	my ($key,$value) = $self->_return_new_file_metadata( '/' );
@@ -31,6 +32,7 @@ sub _return_new_file_metadata {
 	my $self = shift;
 	my $remote_file = shift;
 	return if ! $remote_file;
+	confess "Expect an string $remote_file" if ref $remote_file;
 	my $file = path($remote_file);
 	my $key = md5_base64($remote_file);
 	my $parent;
