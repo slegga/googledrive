@@ -217,9 +217,9 @@ sub _get_rem_value {
 		return  if exists $remote_file->{$key};
 		}
 	return $remote_file->$key if $remote_file->can($key);
-	print STDERR $key.."  ".ref($remote_file)."\n";
+	print STDERR "NOT FOUND $key..".ref($remote_file)."\n";
 	warn Dumper $remote_file;
-	die;
+	return;
 }
 
 sub _should_sync {
@@ -649,7 +649,7 @@ sub path_resolveu {
 			next;
 		}
 #		my $tmp = $self->net_google_drive_simple->file_metadata($folder_id);
-		say "part $part ".($folder_id//'__UNDEF__');#. Dumper $tmp;
+		say "part ".decode('UTF-8',$part) .($folder_id//'__UNDEF__');#. Dumper $tmp;
         my $children = $self->net_google_drive_simple->children_by_folder_id( $folder_id,
           { maxResults    => 100, # path resolution maxResults is different
           },
