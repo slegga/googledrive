@@ -113,6 +113,9 @@ Jump over google docs files.
 
 sub mirror {
     my ($self, $args) = @_;
+    my $path = Mojo::Home->new->child('migrations', 'files_state.sql');
+	$self->sqlite->migrations->from_file($path->to_string)->migrate;
+
     $self->time(time);
 
 
@@ -120,8 +123,6 @@ sub mirror {
     say "LAST RUN:  ". localtime($self->old_time);
     say "START: ". (time - $self->time);
     #update database if new version
-    my $path = Mojo::Home->new->child('migrations', 'files_state.sql');
-	$self->sqlite->migrations->from_file($path->to_string)->migrate;
 
     # get list of localfiles:
 	my %lc = map { $_ => -d $_ } map { $_->to_string } path($self->local_root)->list_tree({dont_use_nlink=>1,dir=>1})->each;
