@@ -558,7 +558,7 @@ sub _process_delta {
     }
     say "\nSTART PROCESS CHANGES REMOTE " . $self->_timeused;
     my $gd=$self->net_google_drive_simple;
-    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page=>0},sprintf("modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
+    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page=>1},sprintf("modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
     print Dumper $rem_chg_objects  if $ENV{NMS_DEBUG};
 
     # process changes
