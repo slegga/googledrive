@@ -59,6 +59,7 @@ has remote_root_ID =>sub {my $self = shift;
     return $remote_root_ID};
 has net_google_drive_simple => sub {Net::Google::Drive::Simple->new()};
 has remote_root => sub{path('/')};
+has delete_to => 'local'; # where to delete. Local or both or none.
 has dbfile => $ENV{HOME}.'/.googledrive/files_state.db';
 has sqlite => sub {
 	my $self = shift;
@@ -516,9 +517,19 @@ sub _process_delta {
     my %cache=();
     for my $r(@$tmpc) {
         die Dumper $r if !exists $r->{loc_pathfile};
-        my $lfn = delete $r->{loc_pathfile};
-#        $lfn = decode('UTF8',$lfn);
-        # utf8::upgrade($lfn);
+        if (! $lc{$r->{loc_pathfile}}) {	# file only in db not locally
+	        if ($self->delete_to eq 'local') {
+	        	# TODO: Delete row if not exists
+	        	$self->db->query('delete from files_state where loc_pathfile =?', $r->{loc_pathfile});
+	        	next;
+	        } elsif ($self->delete_to eq 'both') {
+	        	...
+	        	# prepare for deletion on remote
+	        } else {
+	        	die "Wrong delete_to option ".$self->delete_to;
+	        }
+        }
+        my $lfn =  $r->{loc_pathfile};
         $cache{$lfn} = $r;
     }
     for my $lc_pathfile (keys %lc) {
@@ -547,7 +558,7 @@ sub _process_delta {
     }
     say "\nSTART PROCESS CHANGES REMOTE " . $self->_timeused;
     my $gd=$self->net_google_drive_simple;
-    my $rem_chg_objects = $gd->search({},{page=>0},sprintf("modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
+    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page=>0},sprintf("modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
     print Dumper $rem_chg_objects  if $ENV{NMS_DEBUG};
 
     # process changes
