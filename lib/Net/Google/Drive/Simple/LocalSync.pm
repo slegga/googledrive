@@ -558,15 +558,27 @@ sub _process_delta {
     }
     say "\nSTART PROCESS CHANGES REMOTE " . $self->_timeused;
     my $gd=$self->net_google_drive_simple;
-    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page=>1},sprintf("modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
+	my @remote_changed_obj;
+	my $page = 0;
+	my $lastnum=-1;
+    while ($page<20) {
+	    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page =>$page},sprintf("modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
+	    last if scalar(@$rem_chg_objects) == $lastnum; # guess same result as last query
+	    push @remote_changed_obj,@$rem_chg_objects;
+	    last if scalar(@$rem_chg_objects) <100;
+	    $lastnum = scalar(@$rem_chg_objects);
+	    say "$page: $lastnum";
+	    $page++;
+		}
+    say "Changed remote ". scalar @remote_changed_obj;
     if ($ENV{NMS_DEBUG}) {
-	    say $_ for sort map{_get_rem_value($_,'title')} @$rem_chg_objects;
+	    say $_ for sort map{_get_rem_value($_,'title')} @remote_changed_obj;
     }
-die;
+
     # process changes
 
     # from remote to local
-    for my $rem_object (@$rem_chg_objects) {
+    for my $rem_object (@remote_changed_obj) {
     	next if ! _get_rem_value($rem_object,'downloadUrl'); # ignore google documents
         say "Remote ".$self->_decode_remote_string(_get_rem_value($rem_object,'title'));
         #se på å slå opp i cache før construct
