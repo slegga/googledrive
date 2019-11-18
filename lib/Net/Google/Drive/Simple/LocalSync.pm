@@ -59,6 +59,7 @@ has remote_root_ID =>sub {my $self = shift;
     return $remote_root_ID};
 has net_google_drive_simple => sub {Net::Google::Drive::Simple->new()};
 has remote_root => sub{path('/')};
+has delete_to => 'local'; # where to delete. Local or both or none.
 has dbfile => $ENV{HOME}.'/.googledrive/files_state.db';
 has sqlite => sub {
 	my $self = shift;
@@ -113,6 +114,9 @@ Jump over google docs files.
 
 sub mirror {
     my ($self, $args) = @_;
+    my $path = Mojo::Home->new->child('migrations', 'files_state.sql');
+	$self->sqlite->migrations->from_file($path->to_string)->migrate;
+
     $self->time(time);
 
 
@@ -120,8 +124,6 @@ sub mirror {
     say "LAST RUN:  ". localtime($self->old_time);
     say "START: ". (time - $self->time);
     #update database if new version
-    my $path = Mojo::Home->new->child('migrations', 'files_state.sql');
-	$self->sqlite->migrations->from_file($path->to_string)->migrate;
 
     # get list of localfiles:
 	my %lc = map { $_ => -d $_ } map { $_->to_string } path($self->local_root)->list_tree({dont_use_nlink=>1,dir=>1})->each;
@@ -217,9 +219,9 @@ sub _get_rem_value {
 		return  if exists $remote_file->{$key};
 		}
 	return $remote_file->$key if $remote_file->can($key);
-	print STDERR $key.."  ".ref($remote_file)."\n";
+	print STDERR "NOT FOUND $key..".ref($remote_file)."\n";
 	warn Dumper $remote_file;
-	die;
+	return;
 }
 
 sub _should_sync {
@@ -515,9 +517,19 @@ sub _process_delta {
     my %cache=();
     for my $r(@$tmpc) {
         die Dumper $r if !exists $r->{loc_pathfile};
-        my $lfn = delete $r->{loc_pathfile};
-#        $lfn = decode('UTF8',$lfn);
-        # utf8::upgrade($lfn);
+        if (! $lc{$r->{loc_pathfile}}) {	# file only in db not locally
+	        if ($self->delete_to eq 'local') {
+	        	# TODO: Delete row if not exists
+	        	$self->db->query('delete from files_state where loc_pathfile =?', $r->{loc_pathfile});
+	        	next;
+	        } elsif ($self->delete_to eq 'both') {
+	        	...
+	        	# prepare for deletion on remote
+	        } else {
+	        	die "Wrong delete_to option ".$self->delete_to;
+	        }
+        }
+        my $lfn =  $r->{loc_pathfile};
         $cache{$lfn} = $r;
     }
     for my $lc_pathfile (keys %lc) {
@@ -546,13 +558,27 @@ sub _process_delta {
     }
     say "\nSTART PROCESS CHANGES REMOTE " . $self->_timeused;
     my $gd=$self->net_google_drive_simple;
-    my $rem_chg_objects = $gd->search({},{page=>0},sprintf("modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
-    print Dumper $rem_chg_objects  if $ENV{NMS_DEBUG};
+	my @remote_changed_obj;
+	my $page = 0;
+	my $lastnum=-1;
+    while ($page<20) {
+	    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page =>$page},sprintf("modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
+	    last if scalar(@$rem_chg_objects) == $lastnum; # guess same result as last query
+	    push @remote_changed_obj,@$rem_chg_objects;
+	    last if scalar(@$rem_chg_objects) <100;
+	    $lastnum = scalar(@$rem_chg_objects);
+	    say "$page: $lastnum";
+	    $page++;
+		}
+    say "Changed remote ". scalar @remote_changed_obj;
+    if ($ENV{NMS_DEBUG}) {
+	    say $_ for sort map{_get_rem_value($_,'title')} @remote_changed_obj;
+    }
 
     # process changes
 
     # from remote to local
-    for my $rem_object (@$rem_chg_objects) {
+    for my $rem_object (@remote_changed_obj) {
     	next if ! _get_rem_value($rem_object,'downloadUrl'); # ignore google documents
         say "Remote ".$self->_decode_remote_string(_get_rem_value($rem_object,'title'));
         #se på å slå opp i cache før construct
@@ -649,7 +675,7 @@ sub path_resolveu {
 			next;
 		}
 #		my $tmp = $self->net_google_drive_simple->file_metadata($folder_id);
-		say "part $part ".($folder_id//'__UNDEF__');#. Dumper $tmp;
+		say "part ".decode('UTF-8',$part) .($folder_id//'__UNDEF__');#. Dumper $tmp;
         my $children = $self->net_google_drive_simple->children_by_folder_id( $folder_id,
           { maxResults    => 100, # path resolution maxResults is different
           },
