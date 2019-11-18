@@ -374,7 +374,7 @@ sub _handle_sync{
     #say Dumper $remote_file;
     my $remote_file_size = $remote_file ? _get_rem_value( $remote_file, 'fileSize') : undef;
     my $loc_pathfile = $local_file->to_string;
-    print 'x ',$self->_utf8ifing($loc_pathfile),"\n";
+    print 'x ',$loc_pathfile,"\n";
     die "NO LOCAL FILE" if ! $loc_pathfile;
     $s ||= $self->_should_sync( $remote_file, $local_file );
     my ($loc_size, $loc_mod) = (stat($loc_pathfile))[7,9];

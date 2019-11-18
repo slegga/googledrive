@@ -11,6 +11,8 @@ use File::Copy 'copy';
 has remote_root => sub {path('t/remote')};
 has remote_root_length => sub {length(shift->remote_root->to_string)};
 has remote_root_id => 'rootid';
+has local_root =>sub {path('t/local')};
+has local_root_length => sub {length(shift->local_root->to_string)};
 has dateformatter => sub { DateTime::Format::RFC3339->new() };
 has file_ids => sub {
 	my $self = shift;
@@ -60,6 +62,8 @@ sub _return_new_file_metadata_from_filename {
 			parents => [{id => $parent}],
 			fileSize => $stat->size,
 			md5Checksum => md5_hex($remote_filename),
+			mimeType => (-d "$file" ? 'application/vnd.google-apps.folder':'html/text'),
+			kind => 'drive#' .(-d "$file" ?'folder' :'file' ),
 		};
 	if ($remote_filename eq '/') {
 		$value->{is_folder}='1',
@@ -133,6 +137,27 @@ sub search{
 			}
 			return \@return;
 		}
+	} elsif ($search =~ /(\w+)\s*\!\=\s*\'([\w\/\.\-]+)\' and (\w+)\s*>\s*\'([\w\-\:]+)\'\s*[aA][nN][dD]\s*(\w+)\s*<\s*\'([\w\-\:]+)\'$/) {
+		my ($key0,$value0,$key1,$value1,$key2,$value2) =($1,$2,$3,$4,$5,$6);
+		my $dateparser =DateTime::Format::RFC3339->new();
+		if ($key1 =~/Date$/ && $key2 =~/Date$/) {
+			$value1 = $dateparser->parse_datetime( $value1 )->epoch;
+			$value2 = $dateparser->parse_datetime( $value2 )->epoch;
+
+			for my $fmd (values %{$self->file_ids}) {
+				next if $fmd->{is_folder};
+				die "Missing $key1" if ! exists $fmd->{$key1};
+				die "Missing $key2" if ! exists $fmd->{$key2};
+				die "Missing $key0" if ! exists $fmd->{$key0};
+				my $rowval0 = $fmd->{$key0};
+				my $rowval1 = $dateparser->parse_datetime( $fmd->{$key1} )->epoch;
+				my $rowval2 = $dateparser->parse_datetime( $fmd->{$key2} )->epoch;
+				if ( $rowval0 ne $value0 && $rowval1 > $value1	&& $rowval2 <= $value2) {
+					push @return, $fmd;
+				}
+			}
+		}
+		return \@return;
 	}
 	die 'No handling of search. Please add regexp to handle : '.$search;
 }
@@ -162,9 +187,11 @@ sub file_upload {
 	... if $file_id;
 	my $local_file = path($local_pathfile);
 	my $filename = $local_file->basename;
-	my $upload_path = $self->remote_root->child($filename);
-	$local_file->copy_to($upload_path->to_string);
-	my ($key,$value) = $self->_return_new_file_metadata_from_filename($upload_path->to_string);
+	my $upload_path_from_home = $self->remote_root->child($filename);
+	my $upload_pathname = substr($local_file->to_string,$self->local_root_length );
+
+	$local_file->copy_to($upload_path_from_home->to_string);
+	my ($key,$value) = $self->_return_new_file_metadata_from_filename($upload_pathname);
 	my $file_ids = $self->file_ids;
 	$file_ids->{$key} = $value;
 	$self->file_ids($file_ids);
