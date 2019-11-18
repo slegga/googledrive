@@ -562,14 +562,15 @@ sub _process_delta {
 	my $page = 0;
 	my $lastnum=-1;
     while ($page<20) {
-	    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page =>$page},sprintf("modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
+	    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page =>$page},sprintf("trashed = false and mimeType != 'application/vnd.google-apps.folder' and modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
 	    last if scalar(@$rem_chg_objects) == $lastnum; # guess same result as last query
 	    push @remote_changed_obj,@$rem_chg_objects;
 	    last if scalar(@$rem_chg_objects) <100;
 	    $lastnum = scalar(@$rem_chg_objects);
 	    say "$page: $lastnum";
 	    $page++;
-		}
+	}
+	@remote_changed_obj = grep { _get_rem_vallue($_,'kind') eq 'drive#file' } @remote_changed_obj;
     say "Changed remote ". scalar @remote_changed_obj;
     if ($ENV{NMS_DEBUG}) {
 	    say $_ for sort map{_get_rem_value($_,'title')} @remote_changed_obj;
