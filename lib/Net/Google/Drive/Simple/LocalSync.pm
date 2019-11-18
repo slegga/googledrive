@@ -346,7 +346,7 @@ sub _utf8ifing {
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
     my $row;
-    say "w $local_file  &  ". ($remote_file ? decode('UTF8', _get_rem_value($remote_file, 'title')) : '__UNDEF__').' folder_id:'.($folder_id//'__UNDEF__');
+    say "w ".decode('UTF-8',$local_file)."  &  ". ($remote_file ? decode('UTF8', _get_rem_value($remote_file, 'title')) : '__UNDEF__').' folder_id:'.($folder_id//'__UNDEF__');
     my $s; # sync option chosed
     if (! defined $remote_file) {
     	# deleted on server try to find new remote_file_object
@@ -391,6 +391,8 @@ sub _handle_sync{
             move($tmpfile, $loc_pathfile);
 			 if (-f $loc_pathfile) {
  	            say "success download $loc_pathfile";
+ 	            $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_Epoch,loc_md5_hex,rem_md5_hex) VALUES(?,?,?,?,?)',$loc_pathfile,_get_rem_value($remote_file,'fileSize'),
+ 	            time,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'));
 			 } else {
 			 	die "ERROR DOWNLOAD $loc_pathfile";
 			 }
@@ -570,7 +572,7 @@ sub _process_delta {
 	    say "$page: $lastnum";
 	    $page++;
 	}
-	@remote_changed_obj = grep { _get_rem_vallue($_,'kind') eq 'drive#file' } @remote_changed_obj;
+	@remote_changed_obj = grep { _get_rem_value($_,'kind') eq 'drive#file' } @remote_changed_obj;
     say "Changed remote ". scalar @remote_changed_obj;
     if ($ENV{NMS_DEBUG}) {
 	    say $_ for sort map{_get_rem_value($_,'title')} @remote_changed_obj;
