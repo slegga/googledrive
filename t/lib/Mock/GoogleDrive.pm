@@ -6,6 +6,7 @@ use DateTime;
 use DateTime::Format::RFC3339;
 use Carp qw/confess/;
 use Data::Dumper;
+use File::Copy 'copy';
 
 has remote_root => sub {path('t/remote')};
 has remote_root_length => sub {length(shift->remote_root->to_string)};
@@ -35,7 +36,7 @@ sub _return_new_file_metadata_from_filename {
 	my $remote_filename = shift;
 	return if ! $remote_filename;
 	confess "Expect an string $remote_filename" if ref $remote_filename;
-	my $file = path($self->remote_root->to_string,$remote_filename);
+	my $file = path($self->remote_root->realpath->to_string, $remote_filename); #$self->remote_root->realpath->to_string,
 	die "file is undef $remote_filename" if ! defined $file;
 	my $key = md5_base64($remote_filename);
 	my $parent;
@@ -46,19 +47,23 @@ sub _return_new_file_metadata_from_filename {
 		$parent = md5_base64($file->dirname->to_string);
 	}
 	my $stat = $file->stat;
-	die "undef stat $remote_filename".($stat//'__UNDEF_') if !ref $stat;
+	die "undef stat $file $remote_filename".($stat//'__UNDEF_') if !ref $stat;
 
 	my $value = {
 			id => $key,
 			remote_pathname => $remote_filename,
 			real_path => $remote_filename eq '/'  ? $self->remote_root->realpath : $file->realpath,
+			is_folder => -d "$file",
 			modifiedDate => $self->dateformatter->format_datetime(DateTime->from_epoch(epoch => $file->stat->mtime)),
-			downloadUrl => $key,
+			downloadUrl => $file->realpath->to_string,
 			title => $file->basename,
 			parents => [{id => $parent}],
 			fileSize => $stat->size,
 			md5Checksum => md5_hex($remote_filename),
 		};
+	if ($remote_filename eq '/') {
+		$value->{is_folder}='1',
+	}
 	return ($key,$value);
 }
 
@@ -116,8 +121,10 @@ sub search{
 			$value2 = $dateparser->parse_datetime( $value2 )->epoch;
 
 			for my $fmd (values %{$self->file_ids}) {
+				next if $fmd->{is_folder};
 				next if ! exists $fmd->{$key1};
 				next if ! exists $fmd->{$key2};
+
 				my $rowval1 = $dateparser->parse_datetime( $fmd->{$key1} )->epoch;
 				my $rowval2 = $dateparser->parse_datetime( $fmd->{$key2} )->epoch;
 				if ( $rowval1 > $value1	&& $rowval2 <= $value2) {
@@ -166,8 +173,9 @@ sub file_upload {
 
 sub download {
 	warn 'download '. join(',',@_);
-	my( $self, $url, $local_file ) = @_;
-	say Dumper $url;
-	...;
+	my( $self, $url, $local_file_name ) = @_;
+	warn Dumper $url;
+	copy($url->{downloadUrl},$local_file_name);
+	return 'ok';
 }
 1;

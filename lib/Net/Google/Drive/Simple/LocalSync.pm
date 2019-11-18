@@ -394,14 +394,14 @@ sub _handle_sync{
 			 }
         } else {
         	say "ERROR: file not found or empty $tmpfile";
-            $self->db->query('replace into files_state (loc_pathfile,loc_size,act_epoch,act_action,rem_file_id,rem_md5_hex,rem_size)
-            	VALUES(?,?,?,?,?,?,?)',$loc_pathfile,0,time,'abort download of empty or none existing file'
-            	, _get_rem_value( $remote_file, 'id'),_get_rem_value( $remote_file, 'md5Checksum'), _get_rem_value( $remote_file, 'fileSize'));
+            $self->db->query('replace into files_state (loc_pathfile,loc_size,act_epoch,act_action,rem_file_id,rem_md5_hex)
+            	VALUES(?,?,?,?,?,?)',$loc_pathfile,0,time,'abort download of empty or none existing file'
+            	, _get_rem_value( $remote_file, 'id'),_get_rem_value( $remote_file, 'md5Checksum'));
             return;
 #            die "download error $tmpfile." .Dumper $remote_file;
         }
-		die Dumper $remote_file if ref $remote_file eq 'HASH';
-        my $ps = $remote_file->parents;
+#		die Dumper $remote_file if ref $remote_file eq 'HASH';
+        my $ps = _get_rem_value($remote_file,'parents');
         die "Not a array" . Dumper $ps if ! ref $ps eq 'ARRAY';
         my $rem_parent_id;
         $rem_parent_id  = $ps->[0]->{id};

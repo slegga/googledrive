@@ -33,4 +33,5 @@ ok(1,'ok');
 $google_docs->mirror();
 ok (-f 't/remote/test.txt','local file is uploaded');
 ok (-f 't/local/remote-file.txt','remote file is downloaded');
-done_testing;
+
+done_testing();
