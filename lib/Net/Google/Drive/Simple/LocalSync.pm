@@ -368,7 +368,7 @@ sub _handle_sync{
     		       	say "LOCAL FILE MOVED/DELETED TO ".decode('UTF8',$conflict_bck->to_string);
 
     			move($local_file, $self->conflict_move_dir->child($local_file->to_string));
-		    	say string2perlenc("unlink $local_file");
+		    	say _string2perlenc("unlink $local_file");
 		    	# $local_file->remove;
 	 	   		return;
 	 	   	} else {
