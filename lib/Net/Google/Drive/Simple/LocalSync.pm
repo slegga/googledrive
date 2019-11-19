@@ -249,7 +249,7 @@ sub _should_sync {
         for my $r( $self->db->query('select * from files_state where loc_pathfile like ?',substr($loc_pathname ,0, 4).'%')->hashes->each ) {
             next if !$r;
             say $r if ref $r ne 'HASH';
-            #say join('#', grep{$_} map{$self->_utf8ifing($_)} grep {$_} values %$r) ;
+            #say join('#', grep{$_} map{_utf8ifing($_)} grep {$_} values %$r) ;
         }
         # die "No data cached data for $loc_pathname";
         say "insert cache $loc_pathname ";
@@ -257,10 +257,10 @@ sub _should_sync {
         $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex
             , rem_file_id,   rem_filename, rem_mod_epoch, rem_md5_hex, act_epoch, act_action)
             VALUES(?,?,?,?,?, ?,?,?,?,?)'
-            ,$loc_pathname , $loc_size, $loc_mod, $loc_md5_hex, _get_rem_value($remote_file,'id'), $self->_decode_remote_string( _get_rem_value($remote_file,'title')), $rem_mod , _get_rem_value($remote_file,'md5Checksum'), time, 'registered'
+            ,$loc_pathname , $loc_size, $loc_mod, $loc_md5_hex, _get_rem_value($remote_file,'id'), _string2perlenc( _get_rem_value($remote_file,'title')), $rem_mod , _get_rem_value($remote_file,'md5Checksum'), time, 'registered'
         );
         $filedata = {loc_pathfile=>$loc_pathname  , loc_size=>$loc_size, loc_mod_epoch=>$loc_mod, loc_md5_hex=>$loc_md5_hex,
-            , _get_rem_value($remote_file,'id'), rem_filename =>$self->_decode_remote_string(_get_rem_value($remote_file,'title')), rem_mod_epoch=>$rem_mod, rem_md5_hex=>_get_rem_value($remote_file,'md5Checksum') ,
+            , _get_rem_value($remote_file,'id'), rem_filename => _string2perlenc(_get_rem_value($remote_file,'title')), rem_mod_epoch=>$rem_mod, rem_md5_hex=>_get_rem_value($remote_file,'md5Checksum') ,
              act_epoch=>time, 'registered'};
     } else {
         # filter looping changes (Changes done by downloading)
@@ -312,7 +312,7 @@ sub _should_sync {
         my $conflict_bck = path($ENV{HOME},'.googledrive','conflict-removed',$loc_pathname);
         $conflict_bck->dirname->make_path;
        	move($loc_pathname, $conflict_bck->to_string);
-       	say "LOCAL FILE MOVED TO ".decode('UTF8',$conflict_bck->to_string);
+       	say "LOCAL FILE MOVED TO "._string2perlenc($conflict_bck->to_string);
        	return 'down';
     }
     if ( -f $local_file and $rem_mod < $loc_mod ) {
@@ -326,16 +326,17 @@ sub _should_sync {
 #Try to fix utf8
 
 
-sub _utf8ifing {
-    my ($self, $malformed_utf8) = @_;
+sub _string2perlenc {
+    my $string = shift;
+    confess "Extra argument".join(',',@_) if @_;
     #$malformed_utf8 =~ s/[\x{9}\x{A}\x{D}\x{20}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/_/;
     #$malformed_utf8=~s/Ã.+//;
 	my $return;
-    if ($malformed_utf8 =~ /[\xD8\xF8\FFFD]/) {
+    if ($string =~ /[\xC3\x{FFFD}]/) { # used by utf8
     	# no utf8 try latin1
-    	$return = decode('ISO-8859-1', $malformed_utf8);
+        $return = decode('UTF-8', $string, Encode::FB_DEFAULT);
     } else {
- 	    $return = decode('UTF-8', $malformed_utf8, Encode::FB_DEFAULT);
+        $return = decode('ISO-8859-1', $string);
     }
     return $return;
 }
@@ -347,9 +348,10 @@ sub _utf8ifing {
 ######################################################################################
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
+    confess "MISSING SELF" if ref $remote_file =~/Sync/;
     my $row;
-    my $loc_pathname = ''.decode('ISO-8859-1',$local_file->to_string);#$local_file->to_string;#
-    say "w ".join ('  ',grep{defined $_}($loc_pathname, ($remote_file ? _decode_remote_string( _get_rem_value($remote_file, 'title')) : '__UNDEF__'),' folder_id:',($folder_id//'__UNDEF__')));
+    my $loc_pathname = _string2perlenc($local_file->to_string);#$local_file->to_string;#
+    say "w ".join ('  ',map{_string2perlenc($_)} grep{defined $_}($loc_pathname, ($remote_file ? _string2perlenc( _get_rem_value($remote_file, 'title')) : '__UNDEF__'),' folder_id:',($folder_id//'__UNDEF__')));
     my $s; # sync option chosed
     if (! defined $remote_file) {
     	# deleted on server try to find new remote_file_object
@@ -360,11 +362,11 @@ sub _handle_sync{
     	$row = $self->db->query('select * from files_state where loc_pathfile =?', $loc_pathname)->hash;
     	if (! defined $remote_file) {
     		if( $row && $row->{rem_file_id}) {
-		    	say decode('UTF8',"unlink $local_file");
+		    	say _string2perlenc("unlink $local_file");
 		    	# $local_file->remove;
 	 	   		return;
 	 	   	} else {
-	 	   		say "Should uploade. New file ".decode('UTF8',$local_file);
+	 	   		say "Should uploade. New file "._string2perlenc($local_file);
 	 	 		$s='up';
 	 	   	}
  	   	}
@@ -376,7 +378,7 @@ sub _handle_sync{
 
     #say Dumper $remote_file;
     my $remote_file_size = $remote_file ? _get_rem_value( $remote_file, 'fileSize') : undef;
-    print 'x ',$loc_pathname,"\n";
+    print 'x ',_string2perlenc($loc_pathname),"\n";
     die "NO LOCAL FILE" if ! $loc_pathname;
     $s ||= $self->_should_sync( $remote_file, $local_file );
     my ($loc_size, $loc_mod) = (stat($loc_pathname))[7,9];
@@ -387,7 +389,7 @@ sub _handle_sync{
         my $tmpfile = "/tmp/"._get_rem_value($remote_file,'md5Checksum');
         $self->net_google_drive_simple->download( $remote_file, $tmpfile );
         if (-s $tmpfile) {
-			if (! -e $local_file->dirname) {
+			if ( ! -d $local_file->dirname->to_string ) {
 				$local_file->dirname->make_path;
 			}
             move($tmpfile, $loc_pathname);
@@ -416,7 +418,7 @@ sub _handle_sync{
             VALUES (?,?,?,?,?,?,?,?,?)',$loc_pathname,$loc_size,$loc_mod,_get_rem_value($remote_file,'md5Checksum'),
             _get_rem_value($remote_file,'id'),$rem_parent_id,_get_rem_value($remote_file,'md5Checksum'),
             time,'download');
-    } elsif ( $s eq 'up' && $loc_size>0 ) {
+    } elsif ( $s eq 'up' && $loc_size && $loc_size > 0 ) {
         print "$loc_pathname ..uploading\n";
         say "Folder_id set to ".($folder_id//-1);
         my $md5_hex = md5_hex($loc_pathname);
@@ -434,7 +436,7 @@ sub _handle_sync{
         	my $num_fold_local_root = @{$self->local_root->to_array};
         	my @tmp = @$local_file[$num_fold_local_root .. $#$local_file];
 			my $rem_file = path('/',@tmp);
-			say "REMOTEFILE.".decode('UTF-8',$rem_file->to_string).'-'.join(',',@tmp).'-'.$num_fold_local_root;
+			say "REMOTEFILE."._string2perlenc($rem_file->to_string).'-'.join(',',map{_string2perlenc($_)} @tmp).'-'.$num_fold_local_root;
             $folder_id = $self->remote_make_path($rem_file->dirname);# find or make remote folder
 
         }
@@ -493,16 +495,16 @@ sub _get_file_object_id_by_local_file {
 	return $ids[$parent_lockup]; # root is the last one
 }
 
-# _decode_remote_string
+# _string2perlenc
 # Get takes string from "remote" like title and decod it.
-sub _decode_remote_string {
-	my $self = shift;
-	my $rstring = shift;
-    return if ! defined $rstring;
-
-    die $rstring if ! utf8::decode($rstring);
-	return $rstring;
-}
+# sub _string2perlenc {
+# 	my $self = shift;
+# 	my $rstring = shift;
+#     return if ! defined $rstring;
+#
+#     die $rstring if ! utf8::decode($rstring);
+# 	return $rstring;
+# }
 ######################################################################################
 ######################################################################################
 #                                  DELTA CODE
@@ -542,7 +544,7 @@ sub _process_delta {
             delete $lc{$lc_pathfile};
             next;
         }
-        printf encode('UTF8','%s %s != %s || %s != %s'."\n"),decode('UTF8',$lc_pathfile), ($lc{$lc_pathfile}{size}//-1)
+        printf encode('UTF8','%s %s != %s || %s != %s'."\n"),_string2perlenc($lc_pathfile), ($lc{$lc_pathfile}{size}//-1)
             ,($cache{$lc_pathfile}{loc_size}//-1),($lc{$lc_pathfile}{mod}//-1),($cache{$lc_pathfile}{loc_mod_epoch}//-1)
             if $ENV{NMS_DEBUG};
         say Dumper $cache{$lc_pathfile} if (! exists $cache{$lc_pathfile}{loc_size} || ! defined $cache{$lc_pathfile}{loc_size}) && $ENV{NMS_DEBUG};
@@ -585,7 +587,7 @@ sub _process_delta {
     # from remote to local
     for my $rem_object (@remote_changed_obj) {
     	next if ! _get_rem_value($rem_object,'downloadUrl'); # ignore google documents
-        say "Remote ".$self->_decode_remote_string(_get_rem_value($rem_object,'title'));
+        say "Remote "._string2perlenc(_get_rem_value($rem_object,'title'));
         #se på å slå opp i cache før construct
         my $lf_name = $self->local_construct_path($rem_object);
         my $local_file = path($lf_name);
@@ -625,7 +627,7 @@ sub local_construct_path {
     my $rem_object = shift;
     my $i =0;
     my $parent_id = _get_rem_value($rem_object,'parents')->[0]->{id};
-    my @r=$self->_decode_remote_string(_get_rem_value($rem_object,'title'));
+    my @r=_string2perlenc(_get_rem_value($rem_object,'title'));
 
     while (1) {
         $i++;
@@ -635,7 +637,7 @@ sub local_construct_path {
         #say $i.' '.join('/',@r).' '.$parent_id;
         $rem_object = $self->net_google_drive_simple->file_metadata($parent_id);
               last if ! $rem_object->{parents}->[0]->{id};
-        unshift @r, $self->_decode_remote_string($rem_object->{title});
+        unshift @r, _string2perlenc($rem_object->{title});
         my $ps = $rem_object->{parents};
         if (ref $ps eq 'ARRAY') {
             $parent_id = $ps->[0]->{id};
@@ -674,7 +676,7 @@ sub path_resolveu {
     push @ids, $folder_id;
 
     PART: for my $part ( @parts ) {
-        $part = decode('UTF-8',$part);
+        $part = _string2perlenc($part);
  #       DEBUG "Looking up part $part (folder_id=$folder_id)";
 		if (! defined $folder_id) {
 			unshift @ids, undef;
