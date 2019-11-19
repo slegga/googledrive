@@ -80,6 +80,7 @@ has db => sub {shift->sqlite->db};
 has 'local_root';
 has 'local_files';
 has 'remote_dirs';
+has conflict_move_dir => sub{ path($ENV{HOME},'.googledrive','conflict-removed')};
 has recursive_counter => 0;
 has new_time => sub{time()};
 has 'time';
@@ -307,7 +308,7 @@ sub _should_sync {
 
     if($self->old_time>$rem_mod && $self->old_time>$loc_mod ) {
         warn "CONFLICT LOCAL VS REMOTE CHANGED AFTER LAST SYNC $loc_pathfile";
-        my $conflict_bck = path($ENV{HOME},'.googledrive','conflict-removed',$loc_pathfile);
+        my $conflict_bck = $self->conflict_move_dir->child($loc_pathfile->to_string);
         $conflict_bck->dirname->make_path;
        	move($loc_pathfile, $conflict_bck->to_string);
        	say "LOCAL FILE MOVED TO ".decode('UTF8',$conflict_bck->to_string);
@@ -329,11 +330,11 @@ sub _utf8ifing {
     #$malformed_utf8 =~ s/[\x{9}\x{A}\x{D}\x{20}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/_/;
     #$malformed_utf8=~s/Ã.+//;
 	my $return;
-    if ($malformed_utf8 =~ /[\xD8\xF8\FFFD]/) {
+    if ($malformed_utf8 =~ /[\xD8\xF8]/) {
     	# no utf8 try latin1
     	$return = decode('ISO-8859-1', $malformed_utf8);
     } else {
- 	    $return = decode('UTF-8', $malformed_utf8, Encode::FB_DEFAULT);
+ 	    $return = decode('UTF-8', $malformed_utf8);
     }
     return $return;
 }
@@ -357,6 +358,12 @@ sub _handle_sync{
     	$row = $self->db->query('select * from files_state where loc_pathfile =?', $local_file->to_string)->hash;
     	if (! defined $remote_file) {
     		if( $row && $row->{rem_file_id}) {
+    		        my $conflict_bck = $self->conflict_move_dir->child($local_file->to_string);
+    		        $conflict_bck->dirname->make_path;
+    		       	move($local_file->to_string, $conflict_bck->to_string);
+    		       	say "LOCAL FILE MOVED/DELETED TO ".decode('UTF8',$conflict_bck->to_string);
+
+    			move($local_file, $self->conflict_move_dir->child($local_file->to_string));
 		    	say decode('UTF8',"unlink $local_file");
 		    	# $local_file->remove;
 	 	   		return;
@@ -366,15 +373,10 @@ sub _handle_sync{
 	 	   	}
  	   	}
     }
-#    if (ref $remote_file eq 'HASH') {
-#    	 my $tmp = $self->net_google_drive_simple->data_factory($remote_file);
-#    	 $remote_file =$tmp if (ref $tmp); #success
-#    }
 
-    #say Dumper $remote_file;
     my $remote_file_size = $remote_file ? _get_rem_value( $remote_file, 'fileSize') : undef;
     my $loc_pathfile = $local_file->to_string;
-    print 'x ',$loc_pathfile,"\n";
+    print 'x ',decode('UTF-8',$loc_pathfile),"\n";
     die "NO LOCAL FILE" if ! $loc_pathfile;
     $s ||= $self->_should_sync( $remote_file, $local_file );
     my ($loc_size, $loc_mod) = (stat($loc_pathfile))[7,9];
