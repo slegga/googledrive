@@ -348,7 +348,8 @@ sub _string2perlenc {
 ######################################################################################
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
-    confess "MISSING SELF" if ref $remote_file =~/Sync/;
+    my $tmp = ref $remote_file;
+    confess "MISSING SELF" if $tmp && $tmp =~/Sync/;
     my $row;
     my $loc_pathname = _string2perlenc($local_file->to_string);#$local_file->to_string;#
     say "w ".join ('  ',map{_string2perlenc($_)} grep{defined $_}($loc_pathname, ($remote_file ? _string2perlenc( _get_rem_value($remote_file, 'title')) : '__UNDEF__'),' folder_id:',($folder_id//'__UNDEF__')));
