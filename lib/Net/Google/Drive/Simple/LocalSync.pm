@@ -115,8 +115,8 @@ Jump over google docs files.
 
 sub mirror {
     my ($self, $args) = @_;
-    my $path = Mojo::Home->new->child('migrations', 'files_state.sql');
-	$self->sqlite->migrations->from_file($path->to_string)->migrate;
+    my $path = path("$FindBin::Bin/../")->child('migrations', 'files_state.sql');
+	$self->sqlite->migrations->from_file(_string2perlenc($path->to_string))->migrate;
 
     $self->time(time);
 
@@ -127,7 +127,7 @@ sub mirror {
     #update database if new version
 
     # get list of localfiles:
-	my %lc = map { $_ => -d $_ } map { $_->to_string } path($self->local_root)->list_tree({dont_use_nlink=>1,dir=>1})->each;
+	my %lc = map { $_ => -d $_ } map { _string2perlenc($_->to_string) } path($self->local_root)->list_tree({dont_use_nlink=>1,dir=>1})->each;
     my $remote_dirs = $self->remote_dirs;
     if (! -d $self->local_root) {
     	warn "Creating directory ".$self->local_root;
@@ -163,19 +163,20 @@ Recursive find or make path on google drive for a new pathfile
 
 sub remote_make_path {
     my ( $self, $path_mf ) = @_;
-   my $remote_dirs = $self->remote_dirs;
-	my @ids = $self->path_resolveu($path_mf->to_string);
+    my $remote_dirs = $self->remote_dirs;
+   	my $full_path = _string2perlenc($path_mf->to_string);
+
+	my @ids = $self->path_resolveu($full_path);
 	if (@ids) {
 		say join(',',map{$_//'__UNDEF__'} @ids);
 		return $ids[0]  if $ids[0]; # Return correct path if ok
 	}
 
-	my $full_path = $path_mf->to_string;
 
     say "Makepath in: $full_path";
 
     return $self->remote_root_ID if $full_path eq '/' ;
-    if ($full_path eq $self->local_root->to_string) {
+    if ($full_path eq _string2perlenc($self->local_root->to_string)) {
        	return $self->remote_root_ID;
     }
 	my $locfol = $path_mf->dirname;
@@ -183,19 +184,19 @@ sub remote_make_path {
     	return $self->remote_root_ID;
     }
     #    die "Stop loop at $path_mf $full_path". $self->recursive_counter."\n".join("\n", sort keys %$remote_dirs)
-	my $did = $remote_dirs->{$locfol->to_string};
+	my $did = $remote_dirs->{_string2perlenc($locfol->to_string)};
 	if (!$did) {
-		my @ids = $self->path_resolveu($locfol->to_string);
+		my @ids = $self->path_resolveu(_string2perlenc($locfol->to_string));
 		if (@ids) {
 			$did= $ids[0] ;
-			$remote_dirs->{$locfol->to_string} = $did;
+			$remote_dirs->{_string2perlenc($locfol->to_string)} = $did;
 		}
 	}
 	if (!$did) {
 #			die "$lfs does not exists in ". Dumper  $remote_dirs;
 			$did = $self->remote_make_path($locfol);
 	}
-	my $basename = $path_mf->basename;
+	my $basename = _string2perlenc($path_mf->basename);
 	#my $parent_obj = $self->net_google_drive_simple->data_factory($self->net_google_drive_simple->file_metadata($did));
 	my $children = $self->net_google_drive_simple->children_by_folder_id($did);
 	for my $child(@$children) {
@@ -229,7 +230,7 @@ sub _get_rem_value {
 
 sub _should_sync {
     my ( $self, $remote_file, $local_file ) = @_;
-    my $loc_pathname = decode('ISO-8859-1',$local_file->to_string);
+    my $loc_pathname = _string2perlenc($local_file->to_string);
     die "Not implemented" if $self->{force};
     die "NO LOCAL FILE" if ! $loc_pathname ;
 
@@ -312,7 +313,7 @@ sub _should_sync {
         warn "CONFLICT LOCAL VS REMOTE CHANGED AFTER LAST SYNC $loc_pathname";
         my $conflict_bck = $self->conflict_move_dir->child($loc_pathname);
         $conflict_bck->dirname->make_path;
-       	move($loc_pathname, $conflict_bck->to_string);
+       	move($loc_pathname, _string2perlenc($conflict_bck->to_string));
        	say "LOCAL FILE MOVED TO "._string2perlenc($conflict_bck->to_string);
        	return 'down';
     }
@@ -363,12 +364,12 @@ sub _handle_sync{
     	$row = $self->db->query('select * from files_state where loc_pathfile =?', $loc_pathname)->hash;
     	if (! defined $remote_file) {
     		if( $row && $row->{rem_file_id}) {
-    		        my $conflict_bck = $self->conflict_move_dir->child($local_file->to_string);
+    		        my $conflict_bck = $self->conflict_move_dir->child(_string2perlenc($local_file->to_string));
     		        $conflict_bck->dirname->make_path;
-    		       	move($local_file->to_string, $conflict_bck->to_string);
-    		       	say "LOCAL FILE MOVED/DELETED TO ".decode('UTF8',$conflict_bck->to_string);
+    		       	move(_string2perlenc($local_file->to_string), _string2perlenc($conflict_bck->to_string));
+    		       	say "LOCAL FILE MOVED/DELETED TO "._string2perlenc($conflict_bck->to_string);
 
-    			move($local_file, $self->conflict_move_dir->child($local_file->to_string));
+    			move($local_file, $self->conflict_move_dir->child(_string2perlenc($local_file->to_string)));
 		    	say _string2perlenc("unlink $local_file");
 		    	# $local_file->remove;
 	 	   		return;
@@ -391,7 +392,7 @@ sub _handle_sync{
         my $tmpfile = "/tmp/"._get_rem_value($remote_file,'md5Checksum');
         $self->net_google_drive_simple->download( $remote_file, $tmpfile );
         if (-s $tmpfile) {
-			if ( ! -d $local_file->dirname->to_string ) {
+			if ( ! -d _string2perlenc($local_file->dirname->to_string) ) {
 				$local_file->dirname->make_path;
 			}
             move($tmpfile, $loc_pathname);
@@ -493,7 +494,7 @@ sub _get_file_object_id_by_local_file {
     }
    warn "ERROR: Could not find remote path for ".$local_file if ! @path;
     my $remote_path = path(@path);
-    my @ids = $self->path_resolveu(encode('UTF8','/').$remote_path->to_string);
+    my @ids = $self->path_resolveu('/'._string2perlenc($remote_path->to_string));
 	return $ids[$parent_lockup]; # root is the last one
 }
 
@@ -520,7 +521,7 @@ sub _process_delta {
     my $local_root = $self->local_root;
     my $dt = DateTime::Format::RFC3339->new();
     my $new_delta_sync_epoch = time;
-    my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { $_->to_string } grep {defined $_} path( "$local_root" )->list_tree({dont_use_nlink=>1})->each;
+    my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { _string2perlenc($_->to_string) } grep {defined $_} path( "$local_root" )->list_tree({dont_use_nlink=>1})->each;
     my $tmpc = $self->db->query('select * from files_state')->hashes->to_array;
     my %cache=();
     for my $r(@$tmpc) {
@@ -684,7 +685,6 @@ sub path_resolveu {
 			unshift @ids, undef;
 			next;
 		}
-#		my $tmp = $self->net_google_drive_simple->file_metadata($folder_id);
 		say "part ".$part.'  ' .($folder_id//'__UNDEF__');#. Dumper $tmp; decode('ISO-8859-1',
         my $children = $self->net_google_drive_simple->children_by_folder_id( $folder_id,
           { maxResults    => 100, # path resolution maxResults is different
@@ -712,10 +712,6 @@ sub path_resolveu {
 		#not found if got here
        unshift @ids, undef;
 
-#        my $msg = "Child $part not found";
-#        $self->error( $msg );
-#        ERROR $msg;
-#        return undef;
     }
 
     if( @ids == 1 ) {
