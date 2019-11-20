@@ -314,7 +314,7 @@ sub _should_sync {
         my $conflict_bck = $self->conflict_move_dir->child($loc_pathname);
         $conflict_bck->dirname->make_path;
        	move($loc_pathname, _string2perlenc($conflict_bck->to_string));
-       	say "LOCAL FILE MOVED TO "._string2perlenc($conflict_bck->to_string);
+       	warn "LOCAL FILE MOVED TO "._string2perlenc($conflict_bck->to_string);
        	return 'down';
     }
     if ( -f $local_file and $rem_mod < $loc_mod ) {
