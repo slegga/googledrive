@@ -114,39 +114,45 @@ Jump over google docs files.
 =cut
 
 sub mirror {
-    my ($self, $args) = @_;
-    my $path = path("$FindBin::Bin/../")->child('migrations', 'files_state.sql');
-	$self->sqlite->migrations->from_file(_string2perlenc($path->to_string))->migrate;
+    my ($self, $mode) = @_; #mode can be delta(default), pull, push or full
+    $mode = 'delta' if ! $mode;
+    if ($mode eq 'full') {
+        my $path = path("$FindBin::Bin/../")->child('migrations', 'files_state.sql');
+        $self->sqlite->migrations->from_file(_string2perlenc($path->to_string))->migrate;
+    }
 
     $self->time(time);
-
-
     $self->new_time(time);
+
     say "LAST RUN:  ". localtime($self->old_time);
     say "START: ". (time - $self->time);
     #update database if new version
 
     # get list of localfiles:
-	my %lc = map { $_ => -d $_ } map { _string2perlenc($_->to_string) } path($self->local_root)->list_tree({dont_use_nlink=>1,dir=>1})->each;
+    my %lc;
+	if ($mode ne 'pull') {
+        %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { _string2perlenc($_->to_string) } grep {defined $_} path( $self->local_root->to_string )->list_tree({dont_use_nlink=>1})->each;
+        $self->local_files( \%lc);
+    }
     my $remote_dirs = $self->remote_dirs;
     if (! -d $self->local_root) {
-    	warn "Creating directory ".$self->local_root;
-    	$self->local_root->make_path;
+        if ($mode ne 'full') {
+            die 'First time run must be mode like full';
+        } else {
+            warn "Creating directory ".$self->local_root;
+            $self->local_root->make_path;
+        }
     }
     $remote_dirs->{$self->local_root } = $self->remote_root_ID;
 
-#	say "localfile $_" for keys %lc;
     $self->remote_dirs($remote_dirs);
-     $self->local_files( \%lc);
 
     say "BEFORE _process_folder " . $self->_timeused;
-    #may add to remove_dirs
 
     #delta_sync
     my $local_root = $self->local_root;
     my $dt = DateTime::Format::RFC3339->new();
     my $new_delta_sync_epoch = time;
-    my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { _string2perlenc($_->to_string) } grep {defined $_} path( "$local_root" )->list_tree({dont_use_nlink=>1})->each;
     my $tmpc = $self->db->query('select * from files_state')->hashes->to_array;
     my %cache=();
     for my $r(@$tmpc) {
@@ -441,7 +447,7 @@ sub _string2perlenc {
 
 ######################################################################################
 ######################################################################################
-#                                   COOMMON COE
+#                                   COOMMON CODE
 ######################################################################################
 ######################################################################################
 sub _handle_sync{
@@ -460,16 +466,18 @@ sub _handle_sync{
     	# else delete
     	$row = $self->db->query('select * from files_state where loc_pathfile =?', $loc_pathname)->hash;
     	if (! defined $remote_file) {
-    		if( $row && $row->{rem_file_id}) {
-    		        my $conflict_bck = $self->conflict_move_dir->child(_string2perlenc($local_file->to_string));
-    		        $conflict_bck->dirname->make_path;
-    		       	move(_string2perlenc($local_file->to_string), _string2perlenc($conflict_bck->to_string));
-    		       	say "LOCAL FILE MOVED/DELETED TO "._string2perlenc($conflict_bck->to_string);
+    		if( $row && $row->{rem_file_id}) { # remote file not found but id found in db
+                ...;
+                # TODO fiks DB. Last opp uten file_id
+#                my $conflict_bck = $self->conflict_move_dir->child(_string2perlenc($local_file->to_string));
+#                $conflict_bck->dirname->make_path;
+#                move(_string2perlenc($local_file->to_string), _string2perlenc($conflict_bck->to_string));
+#                say "LOCAL FILE MOVED/DELETED TO "._string2perlenc($conflict_bck->to_string);
 
-    			move($local_file, $self->conflict_move_dir->child(_string2perlenc($local_file->to_string)));
-		    	say _string2perlenc("unlink $local_file");
+#    			move($local_file, $self->conflict_move_dir->child(_string2perlenc($local_file->to_string)));
+#		    	say _string2perlenc("unlink $local_file");
+#		    	$s = 'down';
 		    	# $local_file->remove;
-	 	   		return;
 	 	   	} else {
 	 	   		say "Should uploade. New file "._string2perlenc($local_file);
 	 	 		$s='up';
