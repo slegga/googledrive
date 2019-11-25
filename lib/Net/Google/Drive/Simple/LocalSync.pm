@@ -141,7 +141,104 @@ sub mirror {
 
     say "BEFORE _process_folder " . $self->_timeused;
     #may add to remove_dirs
-    $self->_process_delta;
+
+    #delta_sync
+    my $local_root = $self->local_root;
+    my $dt = DateTime::Format::RFC3339->new();
+    my $new_delta_sync_epoch = time;
+    my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { _string2perlenc($_->to_string) } grep {defined $_} path( "$local_root" )->list_tree({dont_use_nlink=>1})->each;
+    my $tmpc = $self->db->query('select * from files_state')->hashes->to_array;
+    my %cache=();
+    for my $r(@$tmpc) {
+        die Dumper $r if !exists $r->{loc_pathfile};
+        if (! $lc{$r->{loc_pathfile}}) {	# file only in db not locally
+	        if ($self->delete_to eq 'local') {
+	        	# TODO: Delete row if not exists
+	        	$self->db->query('delete from files_state where loc_pathfile =?', $r->{loc_pathfile});
+	        	next;
+	        } elsif ($self->delete_to eq 'both') {
+	        	...
+	        	# prepare for deletion on remote
+	        } else {
+	        	die "Wrong delete_to option ".$self->delete_to;
+	        }
+        }
+        my $lfn =  $r->{loc_pathfile};
+        $cache{$lfn} = $r;
+    }
+    for my $lc_pathfile (keys %lc) {
+        if ($lc{$lc_pathfile}{mod}>$self->new_time) {
+            # probably changed by this script. Replicate next run.
+            delete $lc{$lc_pathfile};
+            next;
+        }
+        printf encode('UTF8','%s %s != %s || %s != %s'."\n"),_string2perlenc($lc_pathfile), ($lc{$lc_pathfile}{size}//-1)
+            ,($cache{$lc_pathfile}{loc_size}//-1),($lc{$lc_pathfile}{mod}//-1),($cache{$lc_pathfile}{loc_mod_epoch}//-1)
+            if $ENV{NMS_DEBUG};
+        say Dumper $cache{$lc_pathfile} if (! exists $cache{$lc_pathfile}{loc_size} || ! defined $cache{$lc_pathfile}{loc_size}) && $ENV{NMS_DEBUG};
+        if (! defined $lc{$lc_pathfile}{size}) {
+            warn $lc_pathfile . Dumper $lc{$lc_pathfile};
+            die;
+        }
+        if (!keys %cache || ! exists $cache{$lc_pathfile} || ! $cache{$lc_pathfile} ) {
+            $lc{$lc_pathfile}{sync} = 1;
+        }
+        elsif ($lc{$lc_pathfile}{size} != ($cache{$lc_pathfile}{loc_size}//0) || $lc{$lc_pathfile}{mod} != ($cache{$lc_pathfile}{loc_mod_epoch}//0) ) {
+            $lc{$lc_pathfile}{sync} = 1;
+        }
+        else {
+            $lc{$lc_pathfile}{sync} = 0;
+        }
+    }
+    say "\nSTART PROCESS CHANGES REMOTE " . $self->_timeused;
+    my $gd=$self->net_google_drive_simple;
+	my @remote_changed_obj;
+	my $page = 0;
+	my $lastnum=-1;
+    while ($page<20) {
+	    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page =>$page},sprintf("trashed = false and mimeType != 'application/vnd.google-apps.folder' and modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
+	    last if scalar(@$rem_chg_objects) == $lastnum; # guess same result as last query
+	    push @remote_changed_obj,@$rem_chg_objects;
+	    last if scalar(@$rem_chg_objects) <100;
+	    $lastnum = scalar(@$rem_chg_objects);
+	    say "$page: $lastnum";
+	    $page++;
+	}
+	@remote_changed_obj = grep { _get_rem_value($_,'kind') eq 'drive#file' } @remote_changed_obj;
+    say "Changed remote ". scalar @remote_changed_obj;
+    if ($ENV{NMS_DEBUG}) {
+	    say $_ for sort map{_get_rem_value($_,'title')} @remote_changed_obj;
+    }
+
+    # process changes
+
+    # from remote to local
+    for my $rem_object (@remote_changed_obj) {
+    	next if ! _get_rem_value($rem_object,'downloadUrl'); # ignore google documents
+        say "Remote "._string2perlenc(_get_rem_value($rem_object,'title'));
+        #se på å slå opp i cache før construct
+        my $lf_name = $self->local_construct_path($rem_object);
+        my $local_file = path($lf_name);
+        #TODO $self->db->query(); replace into files_state (rem_file_id,loc_pathfile,rem_md5_hex)
+        my $sync = $self->_should_sync($rem_object, $local_file);
+        $self->_handle_sync($rem_object, $local_file) if $sync;
+    }
+
+    # from local to remote
+    say "\nSTART PROCESS CHANGES LOCAL " . $self->_timeused;
+    for my $key (keys %lc) {
+        next if ! exists $lc{$key}{sync};
+        next if ! $lc{$key}{sync};
+        my $remote_file_id = $self->_get_file_object_id_by_local_file(path($key));
+        my $rem_object;
+        $rem_object = $self->net_google_drive_simple->file_metadata($remote_file_id) if $remote_file_id;
+        #_get_remote_metadata_from_local_filename($key);
+        $rem_object = undef if ref $rem_object eq 'ARRAY' && @$rem_object == 0;
+        $rem_object = $self->net_google_drive_simple->data_factory($rem_object) if ref $rem_object eq 'HASH';
+    	next if $rem_object && ref $rem_object && ! $rem_object->can('downloadUrl'); # ignore google documents
+		my $local_file = path($key);
+        $self->_handle_sync($rem_object, $local_file) if  $lc{$key}{sync};
+    }
 
     $self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "delta_sync_epoch",$self->new_time);
     $self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "delta_sync_epoch_end_run",time);
@@ -515,106 +612,6 @@ sub _get_file_object_id_by_local_file {
 ######################################################################################
 
 
-sub _process_delta {
-    # look for changes
-    my $self = shift;
-    my $local_root = $self->local_root;
-    my $dt = DateTime::Format::RFC3339->new();
-    my $new_delta_sync_epoch = time;
-    my %lc = map { my @s = stat($_);$_=>{is_folder =>(-d $_), size => $s[7], mod => $s[9]} } map { _string2perlenc($_->to_string) } grep {defined $_} path( "$local_root" )->list_tree({dont_use_nlink=>1})->each;
-    my $tmpc = $self->db->query('select * from files_state')->hashes->to_array;
-    my %cache=();
-    for my $r(@$tmpc) {
-        die Dumper $r if !exists $r->{loc_pathfile};
-        if (! $lc{$r->{loc_pathfile}}) {	# file only in db not locally
-	        if ($self->delete_to eq 'local') {
-	        	# TODO: Delete row if not exists
-	        	$self->db->query('delete from files_state where loc_pathfile =?', $r->{loc_pathfile});
-	        	next;
-	        } elsif ($self->delete_to eq 'both') {
-	        	...
-	        	# prepare for deletion on remote
-	        } else {
-	        	die "Wrong delete_to option ".$self->delete_to;
-	        }
-        }
-        my $lfn =  $r->{loc_pathfile};
-        $cache{$lfn} = $r;
-    }
-    for my $lc_pathfile (keys %lc) {
-        if ($lc{$lc_pathfile}{mod}>$self->new_time) {
-            # probably changed by this script. Replicate next run.
-            delete $lc{$lc_pathfile};
-            next;
-        }
-        printf encode('UTF8','%s %s != %s || %s != %s'."\n"),_string2perlenc($lc_pathfile), ($lc{$lc_pathfile}{size}//-1)
-            ,($cache{$lc_pathfile}{loc_size}//-1),($lc{$lc_pathfile}{mod}//-1),($cache{$lc_pathfile}{loc_mod_epoch}//-1)
-            if $ENV{NMS_DEBUG};
-        say Dumper $cache{$lc_pathfile} if (! exists $cache{$lc_pathfile}{loc_size} || ! defined $cache{$lc_pathfile}{loc_size}) && $ENV{NMS_DEBUG};
-        if (! defined $lc{$lc_pathfile}{size}) {
-            warn $lc_pathfile . Dumper $lc{$lc_pathfile};
-            die;
-        }
-        if (!keys %cache || ! exists $cache{$lc_pathfile} || ! $cache{$lc_pathfile} ) {
-            $lc{$lc_pathfile}{sync} = 1;
-        }
-        elsif ($lc{$lc_pathfile}{size} != ($cache{$lc_pathfile}{loc_size}//0) || $lc{$lc_pathfile}{mod} != ($cache{$lc_pathfile}{loc_mod_epoch}//0) ) {
-            $lc{$lc_pathfile}{sync} = 1;
-        }
-        else {
-            $lc{$lc_pathfile}{sync} = 0;
-        }
-    }
-    say "\nSTART PROCESS CHANGES REMOTE " . $self->_timeused;
-    my $gd=$self->net_google_drive_simple;
-	my @remote_changed_obj;
-	my $page = 0;
-	my $lastnum=-1;
-    while ($page<20) {
-	    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page =>$page},sprintf("trashed = false and mimeType != 'application/vnd.google-apps.folder' and modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
-	    last if scalar(@$rem_chg_objects) == $lastnum; # guess same result as last query
-	    push @remote_changed_obj,@$rem_chg_objects;
-	    last if scalar(@$rem_chg_objects) <100;
-	    $lastnum = scalar(@$rem_chg_objects);
-	    say "$page: $lastnum";
-	    $page++;
-	}
-	@remote_changed_obj = grep { _get_rem_value($_,'kind') eq 'drive#file' } @remote_changed_obj;
-    say "Changed remote ". scalar @remote_changed_obj;
-    if ($ENV{NMS_DEBUG}) {
-	    say $_ for sort map{_get_rem_value($_,'title')} @remote_changed_obj;
-    }
-
-    # process changes
-
-    # from remote to local
-    for my $rem_object (@remote_changed_obj) {
-    	next if ! _get_rem_value($rem_object,'downloadUrl'); # ignore google documents
-        say "Remote "._string2perlenc(_get_rem_value($rem_object,'title'));
-        #se på å slå opp i cache før construct
-        my $lf_name = $self->local_construct_path($rem_object);
-        my $local_file = path($lf_name);
-        #TODO $self->db->query(); replace into files_state (rem_file_id,loc_pathfile,rem_md5_hex)
-        my $sync = $self->_should_sync($rem_object, $local_file);
-        $self->_handle_sync($rem_object, $local_file) if $sync;
-    }
-
-    # from local to remote
-    say "\nSTART PROCESS CHANGES LOCAL " . $self->_timeused;
-    for my $key (keys %lc) {
-        next if ! exists $lc{$key}{sync};
-        next if ! $lc{$key}{sync};
-        my $remote_file_id = $self->_get_file_object_id_by_local_file(path($key));
-        my $rem_object;
-        $rem_object = $self->net_google_drive_simple->file_metadata($remote_file_id) if $remote_file_id;
-        #_get_remote_metadata_from_local_filename($key);
-        $rem_object = undef if ref $rem_object eq 'ARRAY' && @$rem_object == 0;
-        $rem_object = $self->net_google_drive_simple->data_factory($rem_object) if ref $rem_object eq 'HASH';
-    	next if $rem_object && ref $rem_object && ! $rem_object->can('downloadUrl'); # ignore google documents
-		my $local_file = path($key);
-        $self->_handle_sync($rem_object, $local_file) if  $lc{$key}{sync};
-    }
-}
 
 
 
