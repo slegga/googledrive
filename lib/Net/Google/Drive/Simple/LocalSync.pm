@@ -466,19 +466,18 @@ sub _handle_sync{
     	# else delete
     	$row = $self->db->query('select * from files_state where loc_pathfile =?', $loc_pathname)->hash;
     	if (! defined $remote_file) {
-    		if( $row && $row->{rem_file_id}) { # remote file not found but id found in db
-                ...;
-                # TODO fiks DB. Last opp uten file_id
-#                my $conflict_bck = $self->conflict_move_dir->child(_string2perlenc($local_file->to_string));
-#                $conflict_bck->dirname->make_path;
-#                move(_string2perlenc($local_file->to_string), _string2perlenc($conflict_bck->to_string));
-#                say "LOCAL FILE MOVED/DELETED TO "._string2perlenc($conflict_bck->to_string);
+            if( $row && $row->{rem_file_id}) {
+                my $conflict_bck = $self->conflict_move_dir->child(_string2perlenc($local_file->to_string));
+                $conflict_bck->dirname->make_path;
+                move(_string2perlenc($local_file->to_string), _string2perlenc($conflict_bck->to_string));
+                say "CONFLICT: Changed local removed remote. Move local to trash";
+                say "LOCAL FILE MOVED/DELETED TO "._string2perlenc($conflict_bck->to_string);
 
-#    			move($local_file, $self->conflict_move_dir->child(_string2perlenc($local_file->to_string)));
-#		    	say _string2perlenc("unlink $local_file");
-#		    	$s = 'down';
-		    	# $local_file->remove;
-	 	   	} else {
+                move($local_file, $self->conflict_move_dir->child(_string2perlenc($local_file->to_string)));
+                say _string2perlenc("unlink $local_file");
+                $self->db->query('delete from files_state where loc_patfile = ?',$loc_pathname);
+                return;
+            } else {
 	 	   		say "Should uploade. New file "._string2perlenc($local_file);
 	 	 		$s='up';
 	 	   	}

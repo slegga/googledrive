@@ -12,6 +12,8 @@ use Mock::GoogleDrive;
 use Mojo::SQLite;
 
 #my $testdbname = 't/data/temp-sqlite.db';
+`rm -r t/local/*`;
+`echo local-file >t/local/local-file.txt`;
 `rm -r t/remote/*`;
 `echo remote-file >t/remote/remote-file.txt`;
 
@@ -31,7 +33,7 @@ my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
 );
 ok(1,'ok');
 $google_docs->mirror();
-ok (-f 't/remote/test.txt','local file is uploaded');
+ok (-f 't/remote/local-file.txt','local file is uploaded');
 ok (-f 't/local/remote-file.txt','remote file is downloaded');
 
 done_testing();
