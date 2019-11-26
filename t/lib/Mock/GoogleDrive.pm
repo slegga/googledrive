@@ -38,6 +38,10 @@ sub _return_new_file_metadata_from_filename {
 	my $remote_filename = shift;
 	return if ! $remote_filename;
 	confess "Expect an string $remote_filename" if ref $remote_filename;
+
+	# extract path
+
+
 	my $file = path($self->remote_root->realpath->to_string, $remote_filename); #$self->remote_root->realpath->to_string,
 	die "file is undef $remote_filename" if ! defined $file;
 	my $key = md5_base64($remote_filename);
@@ -73,12 +77,15 @@ sub _return_new_file_metadata_from_filename {
 
 sub children {
 	my $self = shift;
+	my $folder_id = shift;
+	my $parent_id = shift;
+
 	warn 'children '. join(',',@_);
-	my $file_id = 'children FILE_ID LEGG INN NOE LURT HER';
-	my $parent_id = 'children PARENT_ID LEGG INN NOE LURT HER';
+	my $folder_id ||= 'children FILE_ID LEGG INN NOE LURT HER';
+	$parent_id ||= 'children PARENT_ID LEGG INN NOE LURT HER';
 	$parent_id = $self->remote_root_id if $_[0] eq '/';
-	return ($file_id,$parent_id) if wantarray;
-	return $file_id;
+	return ($folder_id,$parent_id) if wantarray;
+	return $folder_id;
 }
 
 sub _get_remote_path_from_full_path_file {
@@ -103,7 +110,7 @@ sub children_by_folder_id {
 		die "Not found $remote_dir_name in file_ids $file_id $folder_id\n".Dumper $self->file_ids if ! defined $tmp ;
 		push @return, $tmp;
 	}
-	warn 'children_by_folder_id '. join(',',@_);
+	say STDERR 'children_by_folder_id '. join(',',@_);
 	return \@return;
 }
 
@@ -164,7 +171,7 @@ sub search{
 
 sub path_resolve {
 	my $self = shift;
-	warn 'path_resolve '. join(',',@_);
+	say STDERR 'path_resolve '. join(',',@_);
 	my $remote_file  = $self->remote_root->child(shift);
 	return if ! -f $remote_file->to_string;
 	return 'path_resolve LEGG INN NOE LURT HER'
@@ -173,20 +180,22 @@ sub path_resolve {
 sub file_metadata {
 	my $self = shift;
 	my $file_id = shift;
-	warn 'file_metada '. join(',',@_);
+	say STDERR 'file_metada '. join(',',@_);
 
 	return $self->file_ids->{$file_id};
 }
 
 sub file_upload {
 	my $self = shift;
-	warn 'file_upload '. join(',',@_);
+	say STDERR 'file_upload '. join(',',@_);
 	my $local_pathfile = shift;
 	my $remote_folder_id = shift;
 	my $file_id = shift;
 	... if $file_id;
 	my $local_file = path($local_pathfile);
 	my $filename = $local_file->basename;
+
+	# Recreate path by $remote_folder_id
 	my $upload_path_from_home = $self->remote_root->child($filename);
 	my $upload_pathname = substr($local_file->to_string,$self->local_root_length );
 
