@@ -67,4 +67,10 @@ my $home = path('t/local');
     ok (-f 't/local/remote/remote-file.txt','remote file is downloaded');
 }
 
+# PULL TEST AFTER FILE CHANGE REMOTE
+
+# PUSH TEST AFTER FILE CHANGE AND NEW FILE
+
+# FULL TEST IF ALSO LOCAL IS CLEANED UP
+
 done_testing();
