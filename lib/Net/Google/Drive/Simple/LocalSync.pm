@@ -284,7 +284,8 @@ sub remote_make_path {
     }
 	my $locfol = $path_mf->dirname;
     if ($locfol->to_string eq $self->local_root->to_string || $locfol->to_string eq '/') {
-    	return $self->remote_root_ID;
+#    	return $self->remote_root_ID;
+		warn "DEACTIVETED RETURN ROOT I DIR IN ROOT";
     }
     #    die "Stop loop at $path_mf $full_path". $self->recursive_counter."\n".join("\n", sort keys %$remote_dirs)
 	my $did = $remote_dirs->{_string2perlenc($locfol->to_string)};

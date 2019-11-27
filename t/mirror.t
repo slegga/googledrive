@@ -60,10 +60,11 @@ my $home = path('t/local');
         sqlite =>      $sql,
     );
     ok(1,'ok');
-    my $google_docs->mirror('delta');
+    $google_docs->mirror('delta');
     ok (! -f 't/remote/local-file.txt','Local file is deleted');
     ok (-f 't/remote/local-file.txt','remote file is kept');
     ok (-f 't/remote/local/local-file.txt','local file is uploaded');
     ok (-f 't/local/remote/remote-file.txt','remote file is downloaded');
 }
+
 done_testing();

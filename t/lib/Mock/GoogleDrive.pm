@@ -77,13 +77,12 @@ sub _return_new_file_metadata_from_filename {
 
 sub children {
 	my $self = shift;
-	my $folder_id = shift;
-	my $parent_id = shift;
+	my $parent = shift;
 
-	warn 'children '. join(',',@_);
-	my $folder_id ||= 'children FILE_ID LEGG INN NOE LURT HER';
+	say STDERR 'children '. join(',',@_);
+	my $parent_id = $self->remote_root_id if $parent eq '/';
 	$parent_id ||= 'children PARENT_ID LEGG INN NOE LURT HER';
-	$parent_id = $self->remote_root_id if $_[0] eq '/';
+	my $folder_id ||= 'children FILE_ID LEGG INN NOE LURT HER';
 	return ($folder_id,$parent_id) if wantarray;
 	return $folder_id;
 }
