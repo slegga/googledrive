@@ -44,8 +44,8 @@ my $home = path('t/local');
 
 # TEST DELTA
 
-`rm -r t/local/*`;
-`rm -r t/remote/*`;
+`rm -r t/local/local-file.txt`;
+`rm -r t/remote/remote-file.txt`;
 `mkdir t/local/local`;
 `echo local-file >t/local/local/local-file.txt`;
 `mkdir t/remote/remote`;
@@ -61,7 +61,7 @@ my $home = path('t/local');
     );
     ok(1,'ok');
     $google_docs->mirror('delta');
-    ok (! -f 't/remote/local-file.txt','Local file is deleted');
+    ok (-f 't/remote/local-file.txt','Local file is kept');
     ok (-f 't/remote/local-file.txt','remote file is kept');
     ok (-f 't/remote/local/local-file.txt','local file is uploaded');
     ok (-f 't/local/remote/remote-file.txt','remote file is downloaded');

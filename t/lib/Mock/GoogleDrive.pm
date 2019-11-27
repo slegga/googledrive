@@ -7,6 +7,7 @@ use DateTime::Format::RFC3339;
 use Carp qw/confess/;
 use Data::Dumper;
 use File::Copy 'copy';
+use v5.26;
 
 has remote_root => sub {path('t/remote')};
 has remote_root_length => sub {length(shift->remote_root->to_string)};
@@ -195,10 +196,11 @@ sub file_upload {
 	my $filename = $local_file->basename;
 
 	# Recreate path by $remote_folder_id
-	my $upload_path_from_home = $self->remote_root->child($filename);
 	my $upload_pathname = substr($local_file->to_string,$self->local_root_length );
+	my $upload_path_from_home = $self->remote_root->child($upload_pathname);
 
 	$local_file->copy_to($upload_path_from_home->to_string);
+	say "\$upload_pathname: $upload_path_from_home";
 	my ($key,$value) = $self->_return_new_file_metadata_from_filename($upload_pathname);
 	my $file_ids = $self->file_ids;
 	$file_ids->{$key} = $value;
@@ -207,10 +209,27 @@ sub file_upload {
 }
 
 sub download {
-	warn 'download '. join(',',@_);
+	say STDERR __SUB__.' '. join(',',@_);
 	my( $self, $url, $local_file_name ) = @_;
 	warn Dumper $url;
 	copy($url->{downloadUrl},$local_file_name);
 	return 'ok';
 }
+
+sub folder_create {
+	say STDERR __SUB__.' '. join(',',@_);
+	my ($self, $dirname, $parent_id) = @_;
+	my $file_ids = $self->file_ids;
+	my $parent = $file_ids->{$parent_id};
+	die "Unknown parent_id $parent_id" if ! $parent;
+	path($parent->{real_path}->to_string,$dirname)->make_path;
+	my $remote_pathname = substr($parent->{remote_pathname},$self->remote_root_length).'/'.$dirname;
+	say "REMOTE_PATHNAME " . $remote_pathname;
+	my ($key,$value)= $self->_return_new_file_metadata_from_filename($remote_pathname);
+	$file_ids->{$key} = $value;
+
+	$self->file_ids($file_ids);
+	return $key;
+}
+
 1;

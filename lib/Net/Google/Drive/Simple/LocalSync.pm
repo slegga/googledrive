@@ -476,7 +476,7 @@ sub _handle_sync{
 
                 move($local_file, $self->conflict_move_dir->child(_string2perlenc($local_file->to_string)));
                 say _string2perlenc("unlink $local_file");
-                $self->db->query('delete from files_state where loc_patfile = ?',$loc_pathname);
+                $self->db->query('delete from files_state where loc_pathfile = ?',$loc_pathname);
                 return;
             } else {
 	 	   		say "Should uploade. New file "._string2perlenc($local_file);
