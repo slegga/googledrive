@@ -10,6 +10,7 @@ use lib "$FindBin::Bin/lib";
 use Net::Google::Drive::Simple::LocalSync;
 use Mock::GoogleDrive;
 use Mojo::SQLite;
+use Mojo::File 'path';
 
 #my $testdbname = 't/data/temp-sqlite.db';
 
@@ -67,8 +68,8 @@ sleep 1;
     ok (-f 't/local/remote/remote-file.txt','remote file is downloaded');
 }
 
-#PULL
 
+# PULL TEST AFTER FILE CHANGE REMOTE
 `echo local-file >t/local/local-pull.txt`;
 `echo remote-file >t/remote/remote-pull.txt`;
 
@@ -85,5 +86,28 @@ sleep 1;
     ok (! -f 't/remote/local-pull.txt','Local file is not uploaded');
     ok (-f 't/local/remote-pull.txt','remote file is downloaded');
 }
+
+# PUSH TEST AFTER FILE CHANGE AND NEW FILE
+sleep 1;
+diag 'PUSH';
+
+`echo changed-file > t/local/remote-pull.txt`;
+`echo new-file > t/local/new-file.txt`;
+
+{
+    #read directory structure again after changes
+    my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
+        remote_root => path('/'),
+        local_root  => $home,
+        net_google_drive_simple => Mock::GoogleDrive->new,
+        sqlite =>      $sql,
+    );
+    ok(1,'ok');
+    $google_docs->mirror('pull');
+    is (path('t/remote/remote-pull.txt')->slurp, 'changed-file','Changed file is uploaded');
+    ok (-f 't/local/new-file.txt','New file is pushed');
+}
+
+# FULL TEST IF ALSO LOCAL IS CLEANED UP
 
 done_testing();

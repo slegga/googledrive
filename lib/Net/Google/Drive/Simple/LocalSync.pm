@@ -530,9 +530,9 @@ sub _handle_sync{
         print "$loc_pathname ..uploading\n";
         say "Folder_id set to ".($folder_id//-1);
         my $md5_hex = md5_hex($loc_pathname);
-        die Dumper $remote_file if ref $remote_file eq 'HASH';
-		if (!$folder_id && $remote_file && $remote_file->can('parents')) {
-			my $p = $remote_file->parents;
+#        die Dumper $remote_file if ref $remote_file eq 'HASH';
+		if (!$folder_id && $remote_file && _get_rem_value($remote_file,'parents')) {
+			my $p = _get_rem_value($remote_file,'parents');
 			if (@$p >1) {
 				die "MANY PARENTS DO NOT WHICH TO CHOOSE"
 			} elsif (@$p == 1) {

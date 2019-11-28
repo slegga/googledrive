@@ -51,7 +51,9 @@ sub _return_new_file_metadata_from_filename {
 		$key = $self->remote_root_id;
 		$parent = undef;
 	} else {
-		$parent = md5_base64($file->dirname->to_string);
+		my $parent_name = $remote_filename;
+		$parent_name =~ s!/[^/]+$!!;
+		$parent = md5_base64($parent_name);
 	}
 	my $stat = $file->stat;
 	die "undef stat $file $remote_filename".($stat//'__UNDEF_') if !ref $stat;
@@ -138,7 +140,7 @@ sub search{
 
 				my $rowval1 = $dateparser->parse_datetime( $fmd->{$key1} )->epoch;
 				my $rowval2 = $dateparser->parse_datetime( $fmd->{$key2} )->epoch;
-				if ( $rowval1 > $value1	&& $rowval2 <= $value2) {
+				if ( $rowval1 >= $value1	&& $rowval2 <= $value2) {
 					push @return, $fmd;
 				}
 			}
@@ -159,7 +161,7 @@ sub search{
 				my $rowval0 = $fmd->{$key0};
 				my $rowval1 = $dateparser->parse_datetime( $fmd->{$key1} )->epoch;
 				my $rowval2 = $dateparser->parse_datetime( $fmd->{$key2} )->epoch;
-				if ( $rowval0 ne $value0 && $rowval1 > $value1	&& $rowval2 <= $value2) {
+				if ( $rowval0 ne $value0 && $rowval1 >= $value1	&& $rowval2 <= $value2) {
 					push @return, $fmd;
 				}
 			}
@@ -223,7 +225,8 @@ sub folder_create {
 	my $parent = $file_ids->{$parent_id};
 	die "Unknown parent_id $parent_id" if ! $parent;
 	path($parent->{real_path}->to_string,$dirname)->make_path;
-	my $remote_pathname = substr($parent->{remote_pathname},$self->remote_root_length).'/'.$dirname;
+#	my $remote_pathname = substr($parent->{remote_pathname},$self->remote_root_length).'/'.$dirname;
+	my $remote_pathname = $parent->{remote_pathname}.'/'.$dirname;
 	say "REMOTE_PATHNAME " . $remote_pathname;
 	my ($key,$value)= $self->_return_new_file_metadata_from_filename($remote_pathname);
 	$file_ids->{$key} = $value;
