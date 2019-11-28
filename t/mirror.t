@@ -50,7 +50,7 @@ my $home = path('t/local');
 `echo local-file >t/local/local/local-file.txt`;
 `mkdir t/remote/remote`;
 `echo remote-file >t/remote/remote/remote-file.txt`;
-
+sleep 1;
 {
     #read directory structure again after changes
     my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
@@ -61,10 +61,29 @@ my $home = path('t/local');
     );
     ok(1,'ok');
     $google_docs->mirror('delta');
-    ok (-f 't/remote/local-file.txt','Local file is kept');
-    ok (-f 't/remote/local-file.txt','remote file is kept');
+    ok (! -f 't/remote/remote-file.txt','Local file is deleted when delete on remote');
+    ok (-f 't/remote/local-file.txt','remote file is kept when deleted local');
     ok (-f 't/remote/local/local-file.txt','local file is uploaded');
     ok (-f 't/local/remote/remote-file.txt','remote file is downloaded');
+}
+
+#PULL
+
+`echo local-file >t/local/local-pull.txt`;
+`echo remote-file >t/remote/remote-pull.txt`;
+
+{
+    #read directory structure again after changes
+    my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
+        remote_root => path('/'),
+        local_root  => $home,
+        net_google_drive_simple => Mock::GoogleDrive->new,
+        sqlite =>      $sql,
+    );
+    ok(1,'ok');
+    $google_docs->mirror('pull');
+    ok (! -f 't/remote/local-pull.txt','Local file is not uploaded');
+    ok (-f 't/local/remote-pull.txt','remote file is downloaded');
 }
 
 done_testing();
