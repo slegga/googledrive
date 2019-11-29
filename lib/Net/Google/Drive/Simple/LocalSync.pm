@@ -747,7 +747,7 @@ sub path_resolveu {
 
 		#not found if got here
        unshift @ids, undef;
-
+		$folder_id=undef;
     }
 
     if( @ids == 1 ) {

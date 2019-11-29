@@ -68,7 +68,6 @@ sleep 1;
     ok (-f 't/local/remote/remote-file.txt','remote file is downloaded');
 }
 
-
 # PULL TEST AFTER FILE CHANGE REMOTE
 `echo local-file >t/local/local-pull.txt`;
 `echo remote-file >t/remote/remote-pull.txt`;
@@ -108,6 +107,7 @@ sleep 1;
 }
 
 # FULL TEST IF ALSO LOCAL IS CLEANED UP
+die;
 
 diag 'FULL';
 sleep 1;
