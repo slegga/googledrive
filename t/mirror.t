@@ -90,7 +90,7 @@ sleep 1;
 # PUSH TEST AFTER FILE CHANGE AND NEW FILE
 sleep 1;
 diag 'PUSH';
-
+`echo changed-file > t/local/remote-push.txt`;
 `echo changed-file > t/local/remote-pull.txt`;
 `echo new-file > t/local/new-file.txt`;
 
@@ -104,8 +104,9 @@ diag 'PUSH';
     );
     ok(1,'ok');
     $google_docs->mirror('pull');
-    is (path('t/remote/remote-pull.txt')->slurp, 'changed-file','Changed file is uploaded');
+    is (path('t/remote/remote-pull.txt')->slurp, "changed-file\n",'Changed file is uploaded');
     ok (-f 't/local/new-file.txt','New file is pushed');
+    ok (-f 't/remote/remote-push.txt','New file on remote is not download while push');
 }
 
 # FULL TEST IF ALSO LOCAL IS CLEANED UP

@@ -193,12 +193,20 @@ sub file_upload {
 	my $local_pathfile = shift;
 	my $remote_folder_id = shift;
 	my $file_id = shift;
-	... if $file_id;
 	my $local_file = path($local_pathfile);
 	my $filename = $local_file->basename;
 
 	# Recreate path by $remote_folder_id
 	my $upload_pathname = substr($local_file->to_string,$self->local_root_length );
+	if ($file_id) {
+		my $unlink_meta = $self->file_metadata($file_id);
+		unlink $unlink_meta->{real_path};
+		$upload_pathname = $unlink_meta->{remote_pathname};
+		my $file_ids = $self->file_ids;
+		delete $file_ids->{$file_id};
+	}
+
+
 	my $upload_path_from_home = $self->remote_root->child($upload_pathname);
 
 	$local_file->copy_to($upload_path_from_home->to_string);
