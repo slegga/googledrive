@@ -90,7 +90,7 @@ sleep 1;
 # PUSH TEST AFTER FILE CHANGE AND NEW FILE
 sleep 1;
 diag 'PUSH';
-`echo changed-file > t/local/remote-push.txt`;
+`echo changed-file > t/remote/remote-push.txt`;
 `echo changed-file > t/local/remote-pull.txt`;
 `echo new-file > t/local/new-file.txt`;
 

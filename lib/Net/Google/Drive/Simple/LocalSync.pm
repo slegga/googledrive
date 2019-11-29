@@ -84,25 +84,33 @@ has conflict_move_dir => sub{ path($ENV{HOME},'.googledrive','conflict-removed')
 has recursive_counter => 0;
 has new_time => sub{time()};
 has 'time';
+has 'mode';
 has 'old_time' => sub {
     my $self =shift;
-    my $tmp = $self->db->query('select value from replication_state_int where key = \'delta_sync_epoch\'')->hash;
-    if (ref $tmp) {
+    my $mode = $self->mode || die 'Must set mode';
+    my $tmp;
+    if ($mode eq 'full' ) {
+    	return 0;
+    } elsif ($mode eq 'delta') {
+	    $tmp = $self->db->query("select value from replication_state_int where key = 'delta_sync_epoch'")->hash;
+
+	    # return pull/push if done before
+	    my $return =  $self->db->query("select min(value) from replication_state_int where key in( 'push_sync_epoch', 'pull_sync_epoch' ) group by '1' having min(value)>? and max(value)!= min(value)",$tmp->{value})->hash ;
+	    return $return->{value} if $return;
+	    #else continue with $tmp
+    } elsif ($mode eq 'pull') {
+	    $tmp = $self->db->query("select max(value) as value from replication_state_int where key in( 'delta_sync_epoch', 'pull_sync_epoch' )")->hash;
+    } elsif ($mode eq 'delta') {
+	    $tmp = $self->db->query("select max(value) as value from replication_state_int where key in( 'delta_sync_epoch', 'push_sync_epoch' )")->hash;
+	} else {
+		die "Noknown mode $mode";
+	}
+    if (ref $tmp eq 'HASH') {
         return $tmp->{value};
     } else {
         return 0;
     }
 };
-has last_end_run_time => sub {
-    my $self =shift;
-    my $tmp = $self->db->query('select value from replication_state_int where key = \'delta_sync_epoch_end_run\'',)->hash;
-    if (ref $tmp) {
-        return $tmp->{value};
-    } else {
-        return $self->old_time;
-    }
-};
-#has drive_encoding => 'Latin1';  # Encoding for from title field
 
 =head1 METHODS
 
@@ -116,6 +124,7 @@ Jump over google docs files.
 sub mirror {
     my ($self, $mode) = @_; #mode can be delta(default), pull, push or full
     $mode = 'delta' if ! $mode;
+    $self->mode($mode) if ! $self->mode;
     if ($mode eq 'full') {
         my $path = path("$FindBin::Bin/../")->child('migrations', 'files_state.sql');
         $self->sqlite->migrations->from_file(_string2perlenc($path->to_string))->migrate;
@@ -149,7 +158,6 @@ sub mirror {
 
     say "BEFORE _process_folder " . $self->_timeused;
 
-    #delta_sync
     my $local_root = $self->local_root;
     my $dt = DateTime::Format::RFC3339->new();
     my $new_delta_sync_epoch = time;
@@ -196,41 +204,43 @@ sub mirror {
             $lc{$lc_pathfile}{sync} = 0;
         }
     }
-    say "\nSTART PROCESS CHANGES REMOTE " . $self->_timeused;
-    my $gd=$self->net_google_drive_simple;
-	my @remote_changed_obj;
-	my $page = 0;
-	my $lastnum=-1;
-    while ($page<20) {
-	    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page =>$page},sprintf("trashed = false and mimeType != 'application/vnd.google-apps.folder' and modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
-	    last if scalar(@$rem_chg_objects) == $lastnum; # guess same result as last query
-	    push @remote_changed_obj,@$rem_chg_objects;
-	    last if scalar(@$rem_chg_objects) <100;
-	    $lastnum = scalar(@$rem_chg_objects);
-	    say "$page: $lastnum";
-	    $page++;
+    if ($mode ne 'push') {
+	    say "\nSTART PROCESS CHANGES REMOTE " . $self->_timeused;
+	    my $gd=$self->net_google_drive_simple;
+		my @remote_changed_obj;
+		my $page = 0;
+		my $lastnum=-1;
+	    while ($page<20) {
+		    my $rem_chg_objects = $gd->search({ maxResults => 10000 },{page =>$page},sprintf("trashed = false and mimeType != 'application/vnd.google-apps.folder' and modifiedDate > '%s' and modifiedDate < '%s'", $dt->format_datetime( DateTime->from_epoch(epoch=>$self->old_time)), $dt->format_datetime( DateTime->from_epoch(epoch=>$self->new_time)))  );
+		    last if scalar(@$rem_chg_objects) == $lastnum; # guess same result as last query
+		    push @remote_changed_obj,@$rem_chg_objects;
+		    last if scalar(@$rem_chg_objects) <100;
+		    $lastnum = scalar(@$rem_chg_objects);
+		    say "$page: $lastnum";
+		    $page++;
+		}
+		@remote_changed_obj = grep { _get_rem_value($_,'kind') eq 'drive#file' } @remote_changed_obj;
+	    say "Changed remote ". scalar @remote_changed_obj;
+	    if ($ENV{NMS_DEBUG}) {
+		    say $_ for sort map{_get_rem_value($_,'title')} @remote_changed_obj;
+	    }
+
+	    # process changes
+
+	    # from remote to local
+	    for my $rem_object (@remote_changed_obj) {
+	    	next if ! _get_rem_value($rem_object,'downloadUrl'); # ignore google documents
+	        say "Remote "._string2perlenc(_get_rem_value($rem_object,'title'));
+	        #se på å slå opp i cache før construct
+	        my $lf_name = $self->local_construct_path($rem_object);
+	        my $local_file = path($lf_name);
+	        #TODO $self->db->query(); replace into files_state (rem_file_id,loc_pathfile,rem_md5_hex)
+	        my $sync = $self->_should_sync($rem_object, $local_file);
+	        $self->_handle_sync($rem_object, $local_file) if $sync;
+	    }
 	}
-	@remote_changed_obj = grep { _get_rem_value($_,'kind') eq 'drive#file' } @remote_changed_obj;
-    say "Changed remote ". scalar @remote_changed_obj;
-    if ($ENV{NMS_DEBUG}) {
-	    say $_ for sort map{_get_rem_value($_,'title')} @remote_changed_obj;
-    }
 
-    # process changes
-
-    # from remote to local
-    for my $rem_object (@remote_changed_obj) {
-    	next if ! _get_rem_value($rem_object,'downloadUrl'); # ignore google documents
-        say "Remote "._string2perlenc(_get_rem_value($rem_object,'title'));
-        #se på å slå opp i cache før construct
-        my $lf_name = $self->local_construct_path($rem_object);
-        my $local_file = path($lf_name);
-        #TODO $self->db->query(); replace into files_state (rem_file_id,loc_pathfile,rem_md5_hex)
-        my $sync = $self->_should_sync($rem_object, $local_file);
-        $self->_handle_sync($rem_object, $local_file) if $sync;
-    }
-
-    # from local to remote
+    # from local to remote %lc should be empty if pull
     say "\nSTART PROCESS CHANGES LOCAL " . $self->_timeused;
     for my $key (keys %lc) {
         next if ! exists $lc{$key}{sync};
@@ -246,8 +256,17 @@ sub mirror {
         $self->_handle_sync($rem_object, $local_file) if  $lc{$key}{sync};
     }
 
-    $self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "delta_sync_epoch",$self->new_time);
-    $self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "delta_sync_epoch_end_run",time);
+	#report end work
+	if ($mode eq 'full' || $mode eq 'delta') {
+	    $self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "delta_sync_epoch",$self->new_time);
+	    if ($mode eq 'full') {
+	    	$self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "full_sync_epoch",$self->new_time);
+	    }
+	} elsif ($mode eq 'pull') {
+		$self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "pull_sync_epoch",$self->new_time);
+	} elsif ($mode eq 'push') {
+		$self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "push_sync_epoch",$self->new_time);
+	}
 
     say "FINISH SCRIPT " . $self->_timeused;
 
@@ -370,7 +389,7 @@ sub _should_sync {
              act_epoch=>time, 'registered'};
     } else {
         # filter looping changes (Changes done by downloading)
-        if ($filedata->{act_action} && $filedata->{act_action} =~/down|up/ && $loc_mod < $self->last_end_run_time && $filedata->{act_epoch} < $self->last_end_run_time && $self->last_end_run_time > $self->old_time) {
+        if ($filedata->{act_action} && $filedata->{act_action} =~/down|up/ && $loc_mod > $self->new_time && $filedata->{act_epoch} > $self->new_time) {
             return 'ok';
         }
     }
