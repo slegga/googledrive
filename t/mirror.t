@@ -87,11 +87,11 @@ sleep 1;
 }
 
 # PUSH TEST AFTER FILE CHANGE AND NEW FILE
-sleep 1;
 diag 'PUSH';
 `echo changed-file > t/remote/remote-push.txt`;
 `echo changed-file > t/local/remote-pull.txt`;
 `echo new-file > t/local/new-file.txt`;
+sleep 1;
 
 {
     #read directory structure again after changes
@@ -101,8 +101,8 @@ diag 'PUSH';
         net_google_drive_simple => Mock::GoogleDrive->new,
         sqlite =>      $sql,
     );
-    $google_docs->mirror('pull');
-    is (path('t/remote/remote-pull.txt')->slurp, "changed-file\n",'Changed file is uploaded');
+    $google_docs->mirror('push');
+    is (path('t/remote/remote-pull.txt')->slurp, "changed-file\n",'Changed file is uploaded (remote-pull.txt)');
     ok (-f 't/local/new-file.txt','New file is pushed');
     ok (! -f 't/local/remote-push.txt','New file on remote is not download while push');
 }

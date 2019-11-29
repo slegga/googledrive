@@ -100,7 +100,7 @@ has 'old_time' => sub {
 	    #else continue with $tmp
     } elsif ($mode eq 'pull') {
 	    $tmp = $self->db->query("select max(value) as value from replication_state_int where key in( 'delta_sync_epoch', 'pull_sync_epoch' )")->hash;
-    } elsif ($mode eq 'delta') {
+    } elsif ($mode eq 'push') {
 	    $tmp = $self->db->query("select max(value) as value from replication_state_int where key in( 'delta_sync_epoch', 'push_sync_epoch' )")->hash;
 	} else {
 		die "Noknown mode $mode";
@@ -240,7 +240,7 @@ sub mirror {
 	    }
 	}
 
-    # from local to remote %lc should be empty if pull
+    # sync from local to remote %lc should be empty if pull
     say "\nSTART PROCESS CHANGES LOCAL " . $self->_timeused;
     for my $key (keys %lc) {
         next if ! exists $lc{$key}{sync};
@@ -250,8 +250,8 @@ sub mirror {
         $rem_object = $self->net_google_drive_simple->file_metadata($remote_file_id) if $remote_file_id;
         #_get_remote_metadata_from_local_filename($key);
         $rem_object = undef if ref $rem_object eq 'ARRAY' && @$rem_object == 0;
-        $rem_object = $self->net_google_drive_simple->data_factory($rem_object) if ref $rem_object eq 'HASH';
-    	next if $rem_object && ref $rem_object && ! $rem_object->can('downloadUrl'); # ignore google documents
+#        $rem_object = $self->net_google_drive_simple->data_factory($rem_object) if ref $rem_object eq 'HASH';
+    	next if $rem_object && ref $rem_object && ! _get_rem_can($rem_object,'downloadUrl'); # ignore google documents
 		my $local_file = path($key);
         $self->_handle_sync($rem_object, $local_file) if  $lc{$key}{sync};
     }
@@ -349,6 +349,18 @@ sub _get_rem_value {
 	print STDERR "NOT FOUND $key..".ref($remote_file)."\n";
 	#warn Dumper $remote_file;
 	return;
+}
+
+sub _get_rem_can {
+	my $remote_file = shift;
+	my $key = shift;
+	if (ref $remote_file eq 'HASH') {
+		return exists $remote_file->{$key};
+	} elsif(ref $remote_file) {
+		return $remote_file->can($key);
+	} else {
+		die "Missing HASH or object";
+	}
 }
 
 sub _should_sync {

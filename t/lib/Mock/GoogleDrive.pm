@@ -108,7 +108,7 @@ sub children_by_folder_id {
 		my $remote_dir_name = $self->get_remote_name_from_full_path($f);
 		my $file_id = md5_base64($remote_dir_name);
 		$file_id = $self->remote_root_id if $remote_dir_name eq '/';
-		my $tmp = $self->file_ids->{$folder_id};
+		my $tmp = $self->file_ids->{$file_id};
 		die "Not found $remote_dir_name in file_ids $file_id $folder_id\n".Dumper $self->file_ids if ! defined $tmp ;
 		push @return, $tmp;
 	}
