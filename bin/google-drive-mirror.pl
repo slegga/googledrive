@@ -21,4 +21,4 @@ my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
     conflict_resolution => 'keep_remote',
 );
 
-$google_docs->mirror();
+$google_docs->mirror($ARGV[0]);

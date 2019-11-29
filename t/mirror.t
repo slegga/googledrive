@@ -81,7 +81,6 @@ sleep 1;
         net_google_drive_simple => Mock::GoogleDrive->new,
         sqlite =>      $sql,
     );
-    ok(1,'ok');
     $google_docs->mirror('pull');
     ok (! -f 't/remote/local-pull.txt','Local file is not uploaded');
     ok (-f 't/local/remote-pull.txt','remote file is downloaded');
@@ -102,13 +101,33 @@ diag 'PUSH';
         net_google_drive_simple => Mock::GoogleDrive->new,
         sqlite =>      $sql,
     );
-    ok(1,'ok');
     $google_docs->mirror('pull');
     is (path('t/remote/remote-pull.txt')->slurp, "changed-file\n",'Changed file is uploaded');
     ok (-f 't/local/new-file.txt','New file is pushed');
-    ok (-f 't/remote/remote-push.txt','New file on remote is not download while push');
+    ok (! -f 't/local/remote-push.txt','New file on remote is not download while push');
 }
 
 # FULL TEST IF ALSO LOCAL IS CLEANED UP
+
+diag 'FULL';
+sleep 1;
+#`echo changed-file > t/remote/remote-push.txt`;
+#`echo changed-file > t/local/remote-pull.txt`;
+#`echo new-file > t/local/new-file.txt`;
+
+{
+    #read directory structure again after changes
+    my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
+        remote_root => path('/'),
+        local_root  => $home,
+        net_google_drive_simple => Mock::GoogleDrive->new,
+        sqlite =>      $sql,
+    );
+    $google_docs->mirror('full');
+    my @locals =  sort map{substr($_,length('t/local'))} @{ path('t/local')->list_tree->to_array };
+    my @remotes = sort map{substr($_,length('t/remote'))}@{path('t/remote')->list_tree->to_array };
+	is_deeply(\@locals,\@remotes);
+	# tree t to see diff
+}
 
 done_testing();

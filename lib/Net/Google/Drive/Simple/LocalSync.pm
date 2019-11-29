@@ -725,7 +725,7 @@ sub path_resolveu {
 #            DEBUG "Found child ", $child->title();
 			next if ! defined $child;
             if( _get_rem_value($child,'title') eq $part ) {
-                $folder_id = $child->id();
+                $folder_id = _get_rem_value($child,'id');
                 unshift @ids, $folder_id;
                 $parent = $folder_id;
  #               DEBUG "Parent: $parent";
