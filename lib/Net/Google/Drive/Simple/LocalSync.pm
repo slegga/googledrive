@@ -226,7 +226,7 @@ sub mirror {
 	    }
 
 		if($mode eq 'full') {
-			my %rem_exists = map{ _get_rem_value($_, 'id'), 1} @remote_changed_obj;
+			my %rem_exists = map{ _get_rem_value($_, 'id'), _get_rem_value($_,'title')} @remote_changed_obj;
 			while( my ($key,$value) = each  %cache) {
 				next if ! keys %$value;
 #				warn Dumper $value;
@@ -601,7 +601,9 @@ sub _handle_sync{
 
        	my $rem_file_id;
        	if ($remote_file) {
+       		my $old = $rem_file_id;
             $rem_file_id = $self->net_google_drive_simple->file_upload( $loc_pathname, $folder_id, _get_rem_value($remote_file,'id') );
+            die "$old eq $rem_file_id" if ! $old eq $rem_file_id;
         } else {
         	$rem_file_id = $self->net_google_drive_simple->file_upload( $loc_pathname, $folder_id);
         }

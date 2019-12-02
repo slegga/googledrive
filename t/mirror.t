@@ -12,6 +12,12 @@ use Mock::GoogleDrive;
 use Mojo::SQLite;
 use Mojo::File 'path';
 
+use File::Spec::Functions 'catfile';
+use File::Temp;
+use Mojo::SQLite;
+my $tempdir = File::Temp->newdir; # Deleted when object goes out of scope
+my $tempfile = catfile $tempdir, 'test.db';
+my $sql = Mojo::SQLite->new->from_filename($tempfile);
 #my $testdbname = 't/data/temp-sqlite.db';
 
 # TEST FULL
@@ -21,10 +27,10 @@ use Mojo::File 'path';
 `echo local-file >t/local/local-file.txt`;
 `echo remote-file >t/remote/remote-file.txt`;
 
-my $sql = Mojo::SQLite->new()->from_filename(':memory:');
+#my $sqlfile = Mojo::File->tempfile(DIR=>'/tmp');
+#my $sql = Mojo::SQLite->new()->from_filename($sqlfile->to_string);
 
 $sql->migrations->from_file('migrations/files_state.sql')->migrate;
-
 
 #$sql4->auto_migrate(1)->migrations->name('files_state')->from_data;
 my $home = path('t/local');
@@ -52,8 +58,9 @@ my $home = path('t/local');
 `mkdir t/remote/remote`;
 `echo remote-file >t/remote/remote/remote-file.txt`;
 sleep 1;
-{
+#undef($google_docs);
     #read directory structure again after changes
+{
     my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
         remote_root => path('/'),
         local_root  => $home,
@@ -66,7 +73,10 @@ sleep 1;
     ok (-f 't/remote/local-file.txt','remote file is kept when deleted local');
     ok (-f 't/remote/local/local-file.txt','local file is uploaded');
     ok (-f 't/local/remote/remote-file.txt','remote file is downloaded');
-    is ($sql->db->query('select count(*) from files_state')->array->[0],1,'Rows is kept between runs');
+    is ($sql->db->query('select count(*) from files_state')->array->[0],4,'Rows is kept between runs');
+    is ($sql->db->query('select rem_file_id from files_state group by rem_file_id having count(*)>1')->array,undef,'No duplcate file_id');
+		my $res =    $sql->db->query('select * from files_state')->hashes->to_array;
+    diag Dumper $res;
 #    is ($sql->db->query('select count(*) from replication_state_int')->array->[0],2,'Rows is kept between runs');
 }
 
@@ -76,7 +86,7 @@ sleep 1;
 
 {
     #read directory structure again after changes
-    is ($sql->db->query('select count(*) files_state')->array->[0],1,'Rows is kept between runs');
+    is ($sql->db->query('select count(*) from files_state')->array->[0],4,'Rows is kept between runs');
     my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
         remote_root => path('/'),
         local_root  => $home,
@@ -86,6 +96,8 @@ sleep 1;
     $google_docs->mirror('pull');
     ok (! -f 't/remote/local-pull.txt','Local file is not uploaded');
     ok (-f 't/local/remote-pull.txt','remote file is downloaded');
+    is ($sql->db->query('select rem_file_id from files_state group by rem_file_id having count(*)>1')->array,undef,'No duplcate file_id');
+
 }
 
 sleep 1; #sleep both before and after file change
@@ -108,6 +120,8 @@ sleep 1;
     is (path('t/remote/remote-pull.txt')->slurp, "changed-file\n",'Changed file is uploaded (remote-pull.txt)');
     ok (-f 't/local/new-file.txt','New file is pushed');
     ok (! -f 't/local/remote-push.txt','New file on remote is not download while push');
+    is ($sql->db->query('select rem_file_id from files_state group by rem_file_id having count(*)>1')->array,undef,'No duplcate file_id');
+
 }
 
 # FULL TEST IF ALSO LOCAL IS CLEANED UP
@@ -130,6 +144,8 @@ sleep 1;
     my @locals =  sort map{substr($_,length('t/local'))} @{ path('t/local')->list_tree->to_array };
     my @remotes = sort map{substr($_,length('t/remote'))}@{path('t/remote')->list_tree->to_array };
 	is_deeply(\@locals,\@remotes);
+	is ($sql->db->query('select rem_file_id from files_state group by rem_file_id having count(*)>1')->array,undef,'No duplcate file_id');
+
 	# tree t to see diff
 }
 
