@@ -66,6 +66,8 @@ sleep 1;
     ok (-f 't/remote/local-file.txt','remote file is kept when deleted local');
     ok (-f 't/remote/local/local-file.txt','local file is uploaded');
     ok (-f 't/local/remote/remote-file.txt','remote file is downloaded');
+    is ($sql->db->query('select count(*) from files_state')->array->[0],1,'Rows is kept between runs');
+#    is ($sql->db->query('select count(*) from replication_state_int')->array->[0],2,'Rows is kept between runs');
 }
 
 # PULL TEST AFTER FILE CHANGE REMOTE
@@ -74,6 +76,7 @@ sleep 1;
 
 {
     #read directory structure again after changes
+    is ($sql->db->query('select count(*) files_state')->array->[0],1,'Rows is kept between runs');
     my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
         remote_root => path('/'),
         local_root  => $home,
