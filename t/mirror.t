@@ -32,7 +32,7 @@ my $sql = Mojo::SQLite->new->from_filename($tempfile);
 
 $sql->migrations->from_file('migrations/files_state.sql')->migrate;
 
-#$sql4->auto_migrate(1)->migrations->name('files_state')->from_data;
+#$sql->auto_migrate(1)->migrations->name('files_state')->from_data;
 my $home = path('t/local');
 
 
@@ -73,7 +73,7 @@ sleep 1;
     ok (-f 't/remote/local-file.txt','remote file is kept when deleted local');
     ok (-f 't/remote/local/local-file.txt','local file is uploaded');
     ok (-f 't/local/remote/remote-file.txt','remote file is downloaded');
-    is ($sql->db->query('select count(*) from files_state')->array->[0],4,'Rows is kept between runs');
+    is ($sql->db->query('select count(*) from files_state')->array->[0],3,'Rows is kept between runs');
     is ($sql->db->query('select rem_file_id from files_state group by rem_file_id having count(*)>1')->array,undef,'No duplcate file_id');
 		my $res =    $sql->db->query('select * from files_state')->hashes->to_array;
     diag Dumper $res;
@@ -86,7 +86,7 @@ sleep 1;
 
 {
     #read directory structure again after changes
-    is ($sql->db->query('select count(*) from files_state')->array->[0],4,'Rows is kept between runs');
+    is ($sql->db->query('select count(*) from files_state')->array->[0],3,'Rows is kept between runs');
     my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
         remote_root => path('/'),
         local_root  => $home,

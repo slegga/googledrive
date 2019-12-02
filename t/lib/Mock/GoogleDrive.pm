@@ -104,7 +104,7 @@ sub children_by_folder_id {
 		die Dumper $file_ids;
 	}
 	my @return;
-	for my $f(@{  $remote_dir->list_tree->to_array }) {
+	for my $f(@{  $remote_dir->list->to_array }) {
 		my $remote_dir_name = $self->get_remote_name_from_full_path($f);
 		my $file_id = md5_base64($remote_dir_name);
 		$file_id = $self->remote_root_id if $remote_dir_name eq '/';

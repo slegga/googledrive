@@ -550,8 +550,8 @@ sub _handle_sync{
             move($tmpfile, $loc_pathname);
 			 if (-f $loc_pathname) {
  	            say "success download $loc_pathname";
- 	            $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_Epoch,loc_md5_hex,rem_md5_hex) VALUES(?,?,?,?,?)',$loc_pathname,_get_rem_value($remote_file,'fileSize'),
- 	            time,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'));
+ 	            $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_Epoch,loc_md5_hex,rem_md5_hex,rem_file_id) VALUES(?,?,?,?,?,?)',$loc_pathname,_get_rem_value($remote_file,'fileSize'),
+ 	            time,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'id'));
 			 } else {
 			 	die "ERROR DOWNLOAD $loc_pathname";
 			 }
@@ -649,6 +649,7 @@ sub _get_file_object_id_by_local_file {
    warn "ERROR: Could not find remote path for ".$local_file if ! @path;
     my $remote_path = path(@path);
     my @ids = $self->path_resolveu('/'._string2perlenc($remote_path->to_string));
+    return if !@ids;
 	return $ids[$parent_lockup]; # root is the last one
 }
 
