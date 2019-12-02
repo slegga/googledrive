@@ -225,6 +225,22 @@ sub mirror {
 		    say $_ for sort map{_get_rem_value($_,'title')} @remote_changed_obj;
 	    }
 
+		if($mode eq 'full') {
+			my %rem_exists = map{ _get_rem_value($_, 'id'), 1} @remote_changed_obj;
+			while( my ($key,$value) = each  %cache) {
+				next if ! keys %$value;
+#				warn Dumper $value;
+				if (! $rem_exists{$value->{rem_file_id}} ) {
+					say STDERR "DELETED AT REMOTE delete local ".$value->{loc_pathfile};
+			        my $conflict_bck = $self->conflict_move_dir->child($value->{loc_pathfile});
+			        $conflict_bck->dirname->make_path;
+			       	move($value->{loc_pathfile}, _string2perlenc($conflict_bck->to_string));
+			       	delete $lc{$value->{loc_pathfile}};
+					$self->db->query( "delete from files_state where loc_pathfile = ?", $value->{loc_pathfile});
+				}
+			}
+		}
+
 	    # process changes
 
 	    # from remote to local
@@ -245,14 +261,14 @@ sub mirror {
     for my $key (keys %lc) {
         next if ! exists $lc{$key}{sync};
         next if ! $lc{$key}{sync};
-        my $remote_file_id = $self->_get_file_object_id_by_local_file(path($key));
+		my $local_file = path($key);
+        my $remote_file_id = $self->_get_file_object_id_by_local_file($local_file);
         my $rem_object;
         $rem_object = $self->net_google_drive_simple->file_metadata($remote_file_id) if $remote_file_id;
         #_get_remote_metadata_from_local_filename($key);
         $rem_object = undef if ref $rem_object eq 'ARRAY' && @$rem_object == 0;
 #        $rem_object = $self->net_google_drive_simple->data_factory($rem_object) if ref $rem_object eq 'HASH';
     	next if $rem_object && ref $rem_object && ! _get_rem_can($rem_object,'downloadUrl'); # ignore google documents
-		my $local_file = path($key);
         $self->_handle_sync($rem_object, $local_file) if  $lc{$key}{sync};
     }
 
