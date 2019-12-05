@@ -85,6 +85,7 @@ has recursive_counter => 0;
 has new_time => sub{time()};
 has 'time';
 has 'mode';
+has 'debug'; #print debug info
 has 'old_time' => sub {
     my $self =shift;
     my $mode = $self->mode || die 'Must set mode';
@@ -362,7 +363,7 @@ sub _get_rem_value {
         confess 'Call _get_rem_value with out $self->';
     }
 	return $remote_file->$key if $remote_file->can($key);
-	print STDERR "NOT FOUND $key..".ref($remote_file)."\n";
+#	print STDERR "NOT FOUND $key..".ref($remote_file)."\n";
 	#warn Dumper $remote_file;
 	return;
 }
@@ -438,7 +439,7 @@ sub _should_sync {
 
 	# filediffer up or down?
     if ( ($loc_md5_hex//-1) eq (_get_rem_value($remote_file,'md5Checksum')//-1) ) {
-    	say "Equal md5 ok" ;
+    	say "Equal md5 ok $loc_pathname" if $self->debug;
     	if (! defined $loc_md5_hex) {
     		$self->db->query('delete from files_state where loc_filepath = ?', $loc_pathname);
     		return 'cleanup';
@@ -504,7 +505,8 @@ sub _handle_sync{
     confess "MISSING SELF" if $tmp && $tmp =~/Sync/;
     my $row;
     my $loc_pathname = _string2perlenc($local_file->to_string);#$local_file->to_string;#
-    say "w ".join ('  ',map{_string2perlenc($_)} grep{defined $_}($loc_pathname, ($remote_file ? _string2perlenc( _get_rem_value($remote_file, 'title')) : '__UNDEF__'),' folder_id:',($folder_id//'__UNDEF__')));
+    say "w ".join ('  ',map{_string2perlenc($_)} grep{defined $_}($loc_pathname, ($remote_file ? _string2perlenc( _get_rem_value($remote_file, 'title')) : '__UNDEF__'),' folder_id:',($folder_id//'__UNDEF__')))
+    	if $self->debug;
     my $s; # sync option chosed
     if (! defined $remote_file) {
     	# deleted on server try to find new remote_file_object
@@ -533,7 +535,7 @@ sub _handle_sync{
     }
 
     my $remote_file_size = $remote_file ? _get_rem_value( $remote_file, 'fileSize') : undef;
-    print 'x ',_string2perlenc($loc_pathname),"\n";
+    print 'x ',_string2perlenc($loc_pathname),"\n" if $self->debug;
     die "NO LOCAL FILE" if ! $loc_pathname;
     $s ||= $self->_should_sync( $remote_file, $local_file );
     my ($loc_size, $loc_mod) = (stat($loc_pathname))[7,9];
