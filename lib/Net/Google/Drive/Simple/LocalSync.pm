@@ -13,6 +13,7 @@ use Mojo::SQLite;
 use Encode qw(decode encode);
 use File::Copy;
 use utf8;
+use Data::Printer;
 
 use FindBin;
 use lib "FindBin::Bin/../lib";
@@ -124,6 +125,9 @@ Jump over google docs files.
 
 sub mirror {
     my ($self, $mode) = @_; #mode can be delta(default), pull, push or full
+	my $lockfile ='/tmp/google-drive.lock';
+	die "Lockfile $lockfile exists. Remove before run" if -e $lockfile;
+	`touch $lockfile`; 
     $mode = 'delta' if ! $mode;
     $self->mode($mode) if ! $self->mode;
     if ($mode eq 'full') {
@@ -284,7 +288,7 @@ sub mirror {
 	} elsif ($mode eq 'push') {
 		$self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "push_sync_epoch",$self->new_time);
 	}
-
+	`rm $lockfile`;
     say "FINISH SCRIPT " . $self->_timeused;
 
 }
@@ -365,6 +369,9 @@ sub _get_rem_value {
 	return $remote_file->$key if $remote_file->can($key);
 #	print STDERR "NOT FOUND $key..".ref($remote_file)."\n";
 	#warn Dumper $remote_file;
+	return $remote_file->{data}->{$key} if exists $remote_file->{data}->{$key}; #problems with perl 5.26.3
+	p $remote_file;
+	die "Can not find $key";
 	return;
 }
 
