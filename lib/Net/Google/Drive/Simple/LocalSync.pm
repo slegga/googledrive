@@ -14,7 +14,7 @@ use Encode qw(decode encode);
 use File::Copy;
 use utf8;
 use Data::Printer;
-
+use File::Flock::Tiny;
 use FindBin;
 use lib "FindBin::Bin/../lib";
 binmode STDOUT, ':encoding(UTF-8)';
@@ -87,6 +87,8 @@ has new_time => sub{time()};
 has 'time';
 has 'mode';
 has 'debug'; #print debug info
+has lockfile => '/tmp/google-drive.lock';
+
 has 'old_time' => sub {
     my $self =shift;
     my $mode = $self->mode || die 'Must set mode';
@@ -125,9 +127,9 @@ Jump over google docs files.
 
 sub mirror {
     my ($self, $mode) = @_; #mode can be delta(default), pull, push or full
-	my $lockfile ='/tmp/google-drive.lock';
-	die "Lockfile $lockfile exists. Remove before run" if -e $lockfile;
-	`touch $lockfile`; 
+    my $lockfile = $self->lockfile;
+    my $lock = File::Flock::Tiny->trylock($lockfile);
+	die "Lockfile locked wait for release" if ! $lock;
     $mode = 'delta' if ! $mode;
     $self->mode($mode) if ! $self->mode;
     if ($mode eq 'full') {
@@ -225,6 +227,15 @@ sub mirror {
 		    $page++;
 		}
 		@remote_changed_obj = grep { _get_rem_value($_,'kind') eq 'drive#file' } @remote_changed_obj;
+
+		# look for duplicates
+		my %seen;
+		foreach my $string (map{(_get_rem_value($_,'parents')->[0]//'')._get_rem_value($_,'title')} @remote_changed_obj) {
+
+		    next unless $seen{$string}++;
+		    die  "'$string' is duplicated.\n";
+		}
+
 	    say "Changed remote ". scalar @remote_changed_obj;
 	    if ($ENV{NMS_DEBUG}) {
 		    say $_ for sort map{_get_rem_value($_,'title')} @remote_changed_obj;
@@ -288,7 +299,6 @@ sub mirror {
 	} elsif ($mode eq 'push') {
 		$self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "push_sync_epoch",$self->new_time);
 	}
-	`rm $lockfile`;
     say "FINISH SCRIPT " . $self->_timeused;
 
 }
@@ -370,6 +380,7 @@ sub _get_rem_value {
 #	print STDERR "NOT FOUND $key..".ref($remote_file)."\n";
 	#warn Dumper $remote_file;
 	return $remote_file->{data}->{$key} if exists $remote_file->{data}->{$key}; #problems with perl 5.26.3
+	return if $key eq 'downloadUrl';
 	p $remote_file;
 	die "Can not find $key";
 	return;
