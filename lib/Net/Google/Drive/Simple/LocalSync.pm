@@ -17,6 +17,7 @@ use Data::Printer;
 use File::Flock::Tiny;
 use FindBin;
 use lib "FindBin::Bin/../lib";
+use Carp::Always;
 binmode STDOUT, ':encoding(UTF-8)';
 our $VERSION = '0.54';
 
@@ -87,7 +88,7 @@ has new_time => sub{time()};
 has 'time';
 has 'mode';
 has 'debug'; #print debug info
-has lockfile => '/tmp/google-drive.lock';
+has lockfile => "/tmp/google-drive-$ENV{USER}.lock";
 
 has 'old_time' => sub {
     my $self =shift;
