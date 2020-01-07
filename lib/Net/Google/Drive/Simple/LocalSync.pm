@@ -278,6 +278,7 @@ sub mirror {
     for my $key (keys %lc) {
         next if ! exists $lc{$key}{sync};
         next if ! $lc{$key}{sync};
+        next if ! length($key);
 		my $local_file = path($key);
         my $remote_file_id = $self->_get_file_object_id_by_local_file($local_file);
         my $rem_object;
@@ -285,7 +286,8 @@ sub mirror {
         #_get_remote_metadata_from_local_filename($key);
         $rem_object = undef if ref $rem_object eq 'ARRAY' && @$rem_object == 0;
 #        $rem_object = $self->net_google_drive_simple->data_factory($rem_object) if ref $rem_object eq 'HASH';
-    	next if $rem_object && ref $rem_object && ! _get_rem_can($rem_object,'downloadUrl'); # ignore google documents
+		next if ! $rem_object;
+    	next if ref $rem_object && ! _get_rem_can($rem_object,'downloadUrl'); # ignore google documents
         $self->_handle_sync($rem_object, $local_file) if  $lc{$key}{sync};
     }
 
@@ -404,12 +406,13 @@ sub _should_sync {
     my $loc_pathname = _string2perlenc($local_file->to_string);
     die "Not implemented" if $self->{force};
     die "NO LOCAL FILE" if ! $loc_pathname ;
+	return 'ok' if -d $loc_pathname ;
+	return 'ok' if ! _get_rem_value($remote_file,'downloadUrl');
 
     my $date_time_parser = DateTime::Format::RFC3339->new();
 
     my ($loc_size,$loc_mod)  = ( stat($loc_pathname ) )[7,9];
     my $rem_mod = $date_time_parser->parse_datetime( _get_rem_value($remote_file,'modifiedDate') )->epoch();
-	return 'ok' if -d $loc_pathname ;
 	my $rffs = _get_rem_value($remote_file,'fileSize'); #object or hash
 	return 'down' if ! defined $loc_mod;
 	my $filedata = $self->db->query('select * from files_state where loc_pathfile = ?',$loc_pathname )->hash;
@@ -481,11 +484,11 @@ sub _should_sync {
     return 'up'   if _get_rem_value($remote_file,'fileSize') == 0;
 
     if($self->old_time>$rem_mod && $self->old_time>$loc_mod ) {
-        warn "CONFLICT LOCAL VS REMOTE CHANGED AFTER LAST SYNC $loc_pathname";
+        say "CONFLICT LOCAL VS REMOTE CHANGED AFTER LAST SYNC $loc_pathname";
         my $conflict_bck = $self->conflict_move_dir->child($loc_pathname);
         $conflict_bck->dirname->make_path;
        	move($loc_pathname, _string2perlenc($conflict_bck->to_string));
-       	warn "LOCAL FILE MOVED TO "._string2perlenc($conflict_bck->to_string);
+       	say "LOCAL FILE MOVED TO "._string2perlenc($conflict_bck->to_string);
        	return 'down';
     }
     if ( -f $local_file and $rem_mod < $loc_mod ) {
@@ -521,6 +524,7 @@ sub _string2perlenc {
 sub _handle_sync{
     my ($self,$remote_file, $local_file, $folder_id) = @_;
     my $tmp = ref $remote_file;
+#    confess "Missing remote_file ".($tmp//'__UNDEF__') if ! $tmp;
     confess "MISSING SELF" if $tmp && $tmp =~/Sync/;
     my $row;
     my $loc_pathname = _string2perlenc($local_file->to_string);#$local_file->to_string;#
@@ -561,7 +565,14 @@ sub _handle_sync{
     if ( $s eq 'down' ) {
         return if ($remote_file_size//0) == 0;
         #atomic download
-        print "$loc_pathname ..downloading\n";
+        if (! _get_rem_value($remote_file,'downloadUrl')) {
+        	warn "A google file for not downloading";
+        	return;
+        }
+                print "$loc_pathname ..downloading\n";
+        if (ref $remote_file eq 'HASH') {
+        	$remote_file = $self->net_google_drive_simple->data_factory($remote_file);
+        }
         my $tmpfile = "/tmp/"._get_rem_value($remote_file,'md5Checksum');
         $self->net_google_drive_simple->download( $remote_file, $tmpfile );
         if (-s $tmpfile) {
