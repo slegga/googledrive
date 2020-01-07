@@ -286,7 +286,7 @@ sub mirror {
         #_get_remote_metadata_from_local_filename($key);
         $rem_object = undef if ref $rem_object eq 'ARRAY' && @$rem_object == 0;
 #        $rem_object = $self->net_google_drive_simple->data_factory($rem_object) if ref $rem_object eq 'HASH';
-		next if ! $rem_object;
+#		next if ! $rem_object;
     	next if ref $rem_object && ! _get_rem_can($rem_object,'downloadUrl'); # ignore google documents
         $self->_handle_sync($rem_object, $local_file) if  $lc{$key}{sync};
     }
@@ -371,7 +371,7 @@ sub _get_rem_value {
 	my $remote_file = shift;
 	my $key=shift;
 #	say ref $remote_file;
-	confess Dumper $remote_file if ( ref $remote_file eq 'ARRAY' || ! ref $remote_file);
+	confess 'ARRAY'.Dumper $remote_file if ( ref $remote_file eq 'ARRAY' || ! ref $remote_file);
 	if (ref $remote_file eq 'HASH') {
 		return $remote_file->{$key}  if exists $remote_file->{$key};
 		die "Missing key $key";

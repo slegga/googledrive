@@ -50,7 +50,6 @@ my $home = path('t/local');
 }
 
 # TEST DELTA
-
 `rm -r t/local/local-file.txt`;
 `rm -r t/remote/remote-file.txt`;
 `mkdir t/local/local`;
@@ -72,6 +71,8 @@ sleep 1;
     ok (! -f 't/remote/remote-file.txt','Local file is deleted when delete on remote');
     ok (-f 't/remote/local-file.txt','remote file is kept when deleted local');
     ok (-f 't/remote/local/local-file.txt','local file is uploaded');
+
+        
     ok (-f 't/local/remote/remote-file.txt','remote file is downloaded');
     is ($sql->db->query('select count(*) from files_state')->array->[0],3,'Rows is kept between runs');
     is ($sql->db->query('select rem_file_id from files_state group by rem_file_id having count(*)>1')->array,undef,'No duplcate file_id');
