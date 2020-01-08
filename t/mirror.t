@@ -72,7 +72,7 @@ sleep 1;
     ok (-f 't/remote/local-file.txt','remote file is kept when deleted local');
     ok (-f 't/remote/local/local-file.txt','local file is uploaded');
 
-        
+
     ok (-f 't/local/remote/remote-file.txt','remote file is downloaded');
     is ($sql->db->query('select count(*) from files_state')->array->[0],3,'Rows is kept between runs');
     is ($sql->db->query('select rem_file_id from files_state group by rem_file_id having count(*)>1')->array,undef,'No duplcate file_id');
@@ -102,6 +102,7 @@ sleep 1;
 }
 
 sleep 1; #sleep both before and after file change
+
 # PUSH TEST AFTER FILE CHANGE AND NEW FILE
 diag 'PUSH';
 `echo changed-file > t/remote/remote-push.txt`;
@@ -148,6 +149,55 @@ sleep 1;
 	is ($sql->db->query('select rem_file_id from files_state group by rem_file_id having count(*)>1')->array,undef,'No duplcate file_id');
 
 	# tree t to see diff
+}
+
+# BOTH NEW
+# TEST FULL
+
+`rm -r t/local/*`;
+`rm -r t/remote/*`;
+`echo -n local-change >t/local/both-new.txt`;
+`echo -n remote-change >t/remote/both-new.txt`;
+
+#my $sqlfile = Mojo::File->tempfile(DIR=>'/tmp');
+#my $sql = Mojo::SQLite->new()->from_filename($sqlfile->to_string);
+
+$sql->migrations->from_file('migrations/files_state.sql')->migrate;
+
+#$sql->auto_migrate(1)->migrations->name('files_state')->from_data;
+
+{
+    my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
+        remote_root => path('/'),
+        local_root  => $home,
+        net_google_drive_simple => Mock::GoogleDrive->new,
+        sqlite =>      $sql,
+    );
+    ok(1,'ok');
+    $google_docs->mirror('full');
+    ok (-f 't/remote/both-new.txt','local file is uploaded');
+    ok (-f 't/local/both-new.txt','remote file is downloaded');
+    is( path('t/remote/both-new.txt')->slurp,'remote-change');
+    is( path('t/local/both-new.txt')->slurp,'remote-change');
+}
+
+# LOCAL CHANGE
+sleep 1;
+`echo -n local-change >t/local/both-new.txt`;
+
+{
+    my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
+        remote_root => path('/'),
+        local_root  => $home,
+        net_google_drive_simple => Mock::GoogleDrive->new,
+        sqlite =>      $sql,
+    );
+    ok(1,'ok');
+    $google_docs->mirror('full');
+    ok (-f 't/remote/both-new.txt','local file is uploaded');
+    ok (-f 't/local/both-new.txt','remote file is downloaded');
+    is( path('t/remote/both-new.txt')->slurp,'local-change');
+    is( path('t/local/both-new.txt')->slurp,'local-change');
 }
 
 done_testing();
