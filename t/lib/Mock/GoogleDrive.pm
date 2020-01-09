@@ -243,4 +243,9 @@ sub folder_create {
 	return $key;
 }
 
+sub data_factory {
+	my $self = shift;
+	return shift;
+}
+
 1;
