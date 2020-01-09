@@ -586,8 +586,8 @@ sub _handle_sync{
             move($tmpfile, $loc_pathname);
 			 if (-f $loc_pathname) {
  	            say "success download $loc_pathname";
- 	            $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_Epoch,loc_md5_hex,rem_md5_hex,rem_file_id) VALUES(?,?,?,?,?,?)',$loc_pathname,_get_rem_value($remote_file,'fileSize'),
- 	            time,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'id'));
+ 	            $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_Epoch,loc_md5_hex,rem_md5_hex,rem_file_id,rem_mod_epoch) VALUES(?,?,?,?,?,?,?)',$loc_pathname,_get_rem_value($remote_file,'fileSize'),
+ 	            time,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'id',time));
 			 } else {
 			 	die "ERROR DOWNLOAD $loc_pathname";
 			 }
