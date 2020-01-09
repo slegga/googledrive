@@ -88,7 +88,7 @@ has new_time => sub{time()};
 has 'time';
 has 'mode';
 has 'debug'; #print debug info
-has lockfile => "/tmp/google-drive-$ENV{USER}.lock";
+has lockfile => "/tmp/google-drive-".($ENV{USER}//'USER').".lock";
 
 has 'old_time' => sub {
     my $self =shift;
