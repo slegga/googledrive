@@ -231,10 +231,14 @@ sub mirror {
 
 		# look for duplicates
 		my %seen;
-		foreach my $string (map{(_get_rem_value($_,'parents')->[0]//'')._get_rem_value($_,'title')} @remote_changed_obj) {
+#		for my $string (map{(_get_rem_value($_,'parents')->[0]//'')._get_rem_value($_,'title')} @remote_changed_obj) {
+		for my $i (reverse 0 .. $#remote_changed_obj) {
+			my $string   = (_get_rem_value($remote_changed_obj[$i],'parents')->[0]//'')._get_rem_value($remote_changed_obj[$i],'title');
 
 		    next unless $seen{$string}++;
-		    die  "'$string' is duplicated.\n";
+		    say Dumper  $self->net_google_drive_simple->metadata($remote_changed_obj[$i]->metadata);
+		    warn "'$string' is duplicated from google. TODO: Make some code to view both files and remove the wrong one.\n";
+		    delete $remote_changed_obj[$i];
 		}
 
 	    say "Changed remote ". scalar @remote_changed_obj;
