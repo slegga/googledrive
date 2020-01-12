@@ -88,7 +88,7 @@ has new_time => sub{time()};
 has 'time';
 has 'mode';
 has 'debug'; #print debug info
-has lockfile => "/tmp/google-drive-".($ENV{USER}//'USER').".lock";
+has lockfile => "/tmp/google-drive-".($ENV{USER}//`id -unz`).".lock";
 
 has 'old_time' => sub {
     my $self =shift;
@@ -233,10 +233,14 @@ sub mirror {
 		my %seen;
 #		for my $string (map{(_get_rem_value($_,'parents')->[0]//'')._get_rem_value($_,'title')} @remote_changed_obj) {
 		for my $i (reverse 0 .. $#remote_changed_obj) {
+			if (! defined $remote_changed_obj[$i]) {
+				delete $remote_changed_obj[$i];
+				next;
+			}
 			my $string   = (_get_rem_value($remote_changed_obj[$i],'parents')->[0]//'')._get_rem_value($remote_changed_obj[$i],'title');
 
 		    next unless $seen{$string}++;
-		    say Dumper  $self->net_google_drive_simple->file_metadata($remote_changed_obj[$i]->file_metadata);
+		    say Dumper  $self->net_google_drive_simple->file_metadata(_get_rem_value($remote_changed_obj[$i],'id'));
 		    warn "'$string' is duplicated from google. TODO: Make some code to view both files and remove the wrong one.\n";
 		    delete $remote_changed_obj[$i];
 		}
@@ -247,7 +251,7 @@ sub mirror {
 	    }
 
 		if($mode eq 'full') {
-			my %rem_exists = map{ _get_rem_value($_, 'id'), _get_rem_value($_,'title')} @remote_changed_obj;
+			my %rem_exists = map{ _get_rem_value($_, 'id'), _get_rem_value($_,'title')} grep {defined $_} @remote_changed_obj;
 			while( my ($key,$value) = each  %cache) {
 				next if ! keys %$value;
 #				warn Dumper $value;
@@ -266,6 +270,7 @@ sub mirror {
 
 	    # from remote to local
 	    for my $rem_object (@remote_changed_obj) {
+	    	next if ! defined $rem_object;
 	    	next if ! _get_rem_value($rem_object,'downloadUrl'); # ignore google documents
 	        say "Remote "._string2perlenc(_get_rem_value($rem_object,'title'));
 	        #se på å slå opp i cache før construct
