@@ -236,7 +236,7 @@ sub mirror {
 			my $string   = (_get_rem_value($remote_changed_obj[$i],'parents')->[0]//'')._get_rem_value($remote_changed_obj[$i],'title');
 
 		    next unless $seen{$string}++;
-		    say Dumper  $self->net_google_drive_simple->metadata($remote_changed_obj[$i]->metadata);
+		    say Dumper  $self->net_google_drive_simple->file_metadata($remote_changed_obj[$i]->file_metadata);
 		    warn "'$string' is duplicated from google. TODO: Make some code to view both files and remove the wrong one.\n";
 		    delete $remote_changed_obj[$i];
 		}
