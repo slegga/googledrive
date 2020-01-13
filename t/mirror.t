@@ -42,6 +42,7 @@ my $home = path('t/local');
         local_root  => $home,
         net_google_drive_simple => Mock::GoogleDrive->new,
         sqlite =>      $sql,
+        lockfile =>     '/tmp/t-mirror.t.lck',
     );
     ok(1,'ok');
     $google_docs->mirror('full');
@@ -65,7 +66,8 @@ sleep 1;
         local_root  => $home,
         net_google_drive_simple => Mock::GoogleDrive->new,
         sqlite =>      $sql,
-    );
+        lockfile =>     '/tmp/t-mirror.t.lck',
+        );
     ok(1,'ok');
     $google_docs->mirror('delta');
     ok (! -f 't/remote/remote-file.txt','Local file is deleted when delete on remote');
@@ -93,6 +95,7 @@ sleep 1;
         local_root  => $home,
         net_google_drive_simple => Mock::GoogleDrive->new,
         sqlite =>      $sql,
+        lockfile =>     '/tmp/t-mirror.t.lck',
     );
     $google_docs->mirror('pull');
     ok (! -f 't/remote/local-pull.txt','Local file is not uploaded');
@@ -117,6 +120,7 @@ sleep 1;
         local_root  => $home,
         net_google_drive_simple => Mock::GoogleDrive->new,
         sqlite =>      $sql,
+        lockfile =>     '/tmp/t-mirror.t.lck',
     );
     $google_docs->mirror('push');
     is (path('t/remote/remote-pull.txt')->slurp, "changed-file\n",'Changed file is uploaded (remote-pull.txt)');
@@ -141,6 +145,7 @@ sleep 1;
         local_root  => $home,
         net_google_drive_simple => Mock::GoogleDrive->new,
         sqlite =>      $sql,
+        lockfile =>     '/tmp/t-mirror.t.lck',
     );
     $google_docs->mirror('full');
     my @locals =  sort map{substr($_,length('t/local'))} @{ path('t/local')->list_tree->to_array };
@@ -172,6 +177,7 @@ $sql->migrations->from_file('migrations/files_state.sql')->migrate;
         local_root  => $home,
         net_google_drive_simple => Mock::GoogleDrive->new,
         sqlite =>      $sql,
+        lockfile =>     '/tmp/t-mirror.t.lck',
     );
     ok(1,'ok');
     $google_docs->mirror('full');
@@ -191,6 +197,7 @@ sleep 1;
         local_root  => $home,
         net_google_drive_simple => Mock::GoogleDrive->new,
         sqlite =>      $sql,
+        lockfile =>     '/tmp/t-mirror.t.lck',
     );
     ok(1,'ok');
     $google_docs->mirror('full');

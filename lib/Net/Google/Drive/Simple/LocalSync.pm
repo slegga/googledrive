@@ -175,7 +175,6 @@ sub mirror {
         die Dumper $r if !exists $r->{loc_pathfile};
         if (! $lc{$r->{loc_pathfile}}) {	# file only in db not locally
 	        if ($self->delete_to eq 'local') {
-	        	# TODO: Delete row if not exists
 	        	$self->db->query('delete from files_state where loc_pathfile =?', $r->{loc_pathfile});
 	        	next;
 	        } elsif ($self->delete_to eq 'both') {
@@ -232,17 +231,53 @@ sub mirror {
 		# look for duplicates
 		my %seen;
 #		for my $string (map{(_get_rem_value($_,'parents')->[0]//'')._get_rem_value($_,'title')} @remote_changed_obj) {
+		my @ids_delete_later;
 		for my $i (reverse 0 .. $#remote_changed_obj) {
 			if (! defined $remote_changed_obj[$i]) {
-				delete $remote_changed_obj[$i];
+			 	splice @remote_changed_obj,$i,1;
 				next;
 			}
 			my $string   = (_get_rem_value($remote_changed_obj[$i],'parents')->[0]//'')._get_rem_value($remote_changed_obj[$i],'title');
-
-		    next unless $seen{$string}++;
-		    say Dumper  $self->net_google_drive_simple->file_metadata(_get_rem_value($remote_changed_obj[$i],'id'));
-		    warn "'$string' is duplicated from google. TODO: Make some code to view both files and remove the wrong one.\n";
-		    delete $remote_changed_obj[$i];
+			if (! $string) {
+		 	    splice @remote_changed_obj,$i,1;
+			}
+		    elsif (! exists $seen{$string}) {
+		    	$seen{$string} = _get_rem_value($remote_changed_obj[$i],'id');
+		    }
+		    elsif (! $seen{$string}) {
+		 	    splice @remote_changed_obj,$i,1;
+		    }
+		    elsif($seen{$string} ) {
+				if ($seen{$string} eq _get_rem_value($remote_changed_obj[$i],'id')) {
+					# Some how the same file occurs two times sometimes.
+			 	    splice @remote_changed_obj,$i,1;
+					next;
+				}
+		    			    	say STDERR "DUPLICATES IN REMOTE '$string' '$seen{$string}'!!";
+		    	say STDERR "CANDIDATE 1";
+		    	my $cand1 = $self->net_google_drive_simple->file_metadata($seen{$string});
+		    	say STDERR Dumper $cand1;
+		    	say STDERR "CANDIDATE 2";
+		    	my $cand2 = $self->net_google_drive_simple->file_metadata(_get_rem_value($remote_changed_obj[$i],'id'));
+			    say STDERR Dumper  $cand2;
+			    warn "'$string' is duplicated from google. TODO: Make some code to view both files and remove the wrong one.\n";
+			    if ($cand1->{modifiedDate} ge $cand2->{modifiedDate}) {
+			    	$self->net_google_drive_simple->file_delete($cand2->{id});
+			 	    splice @remote_changed_obj,$i,1;
+			    } else {
+			    	$self->net_google_drive_simple->file_delete($cand1->{id});
+			    	push @ids_delete_later, $cand1->{id};
+			    }
+			    die;
+			}
+		}
+		if (@ids_delete_later) {
+			for my $i (reverse 0 .. $#remote_changed_obj) {
+				my $id =_get_rem_value($remote_changed_obj[$i],'id');
+				if (grep {$id eq $_} @ids_delete_later) {
+			 	    splice @remote_changed_obj,$i,1;
+				}
+			}
 		}
 
 	    say "Changed remote ". scalar @remote_changed_obj;
