@@ -88,7 +88,13 @@ has new_time => sub{time()};
 has 'time';
 has 'mode';
 has 'debug'; #print debug info
-has lockfile => "/tmp/google-drive-".($ENV{USER}//`id -unz`).".lock";
+has user => sub{
+	return $ENV{USER} if exists $ENV{USER};
+	my $r = `id -un`;
+	$r =~s/\n//mg;
+	return $r
+};
+has lockfile => sub{"/tmp/google-drive-".shift->user().".lock"};
 
 has 'old_time' => sub {
     my $self =shift;
