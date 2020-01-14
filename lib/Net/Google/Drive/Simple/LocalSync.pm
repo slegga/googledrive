@@ -619,7 +619,7 @@ sub _handle_sync{
         	warn "A google file for not downloading";
         	return;
         }
-                print "$loc_pathname ..downloading\n";
+        print "$loc_pathname ..downloading\n";
         if (ref $remote_file eq 'HASH') {
         	$remote_file = $self->net_google_drive_simple->data_factory($remote_file);
         }
@@ -771,7 +771,11 @@ sub local_construct_path {
 
     while (1) {
         $i++;
-        last if !$parent_id || $parent_id eq 'root';
+        if (!$parent_id || $parent_id eq 'root') {
+        	warn Dumper $rem_object->file_metadata;
+        	confess('Place file in root');
+        	#last;
+        }
 
         die if ! defined $rem_object;
         #say $i.' '.join('/',@r).' '.$parent_id;
