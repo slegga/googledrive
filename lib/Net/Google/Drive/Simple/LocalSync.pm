@@ -542,10 +542,10 @@ sub _should_sync {
     }
     if ( -f $local_file and $rem_mod < $loc_mod ) {
         return 'up';
-    } elsif ($filedata->{rem_download_md5_hex} eq _get_rem_value($remote_file,'md5Checksum')) {
+    } elsif (($filedata->{rem_download_md5_hex}//'__UNDEF__') eq (_get_rem_value($remote_file,'md5Checksum')//'__UNDEF__')) {
         return 'ok';
     } else  {
-    	'down;'
+    	'down';
     }
 }
 
@@ -712,7 +712,7 @@ sub _handle_sync{
     } elsif ($s eq 'cleanup') {
     #
     } else {
-        die "Unimplemented $s";
+        die "Unimplemented '$s'";
     }
 
 }
