@@ -316,6 +316,7 @@ sub mirror {
 	        say "Remote "._string2perlenc(_get_rem_value($rem_object,'title'));
 	        #se på å slå opp i cache før construct
 	        my $lf_name = $self->local_construct_path($rem_object);
+	        next if ! $lf_name; # file has no parent.
 	        my $local_file = path($lf_name);
 	        #TODO $self->db->query(); replace into files_state (rem_file_id,loc_pathfile,rem_md5_hex)
 	        my $sync = $self->_should_sync($rem_object, $local_file);
@@ -475,9 +476,7 @@ sub _should_sync {
         for my $r( $self->db->query('select * from files_state where loc_pathfile like ?',substr($loc_pathname ,0, 4).'%')->hashes->each ) {
             next if !$r;
             say $r if ref $r ne 'HASH';
-            #say join('#', grep{$_} map{_utf8ifing($_)} grep {$_} values %$r) ;
         }
-        # die "No data cached data for $loc_pathname";
         say "insert cache $loc_pathname ";
         my $loc_md5_hex = md5_hex($loc_pathname);
         $self->db->query('insert into files_state(loc_pathfile, loc_size, loc_mod_epoch, loc_md5_hex
@@ -543,8 +542,10 @@ sub _should_sync {
     }
     if ( -f $local_file and $rem_mod < $loc_mod ) {
         return 'up';
-    } else {
-        return 'down';
+    } elsif ($filedata->{rem_download_md5_hex} eq _get_rem_value($remote_file,'md5Checksum')) {
+        return 'ok';
+    } else  {
+    	'down;'
     }
 }
 
@@ -632,8 +633,8 @@ sub _handle_sync{
             move($tmpfile, $loc_pathname);
 			 if (-f $loc_pathname) {
  	            say "success download $loc_pathname";
- 	            $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_Epoch,loc_md5_hex,rem_md5_hex,rem_file_id,rem_mod_epoch) VALUES(?,?,?,?,?,?,?)',$loc_pathname,_get_rem_value($remote_file,'fileSize'),
- 	            time,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'id',time));
+ 	            $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_Epoch,loc_md5_hex,rem_md5_hex,rem_download_md5_hex,rem_file_id,rem_mod_epoch) VALUES(?,?,?,?,?,?,?,?)',$loc_pathname,_get_rem_value($remote_file,'fileSize'),
+ 	            time,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'id',time));
 			 } else {
 			 	die "ERROR DOWNLOAD $loc_pathname";
 			 }
@@ -650,10 +651,10 @@ sub _handle_sync{
         $rem_parent_id  = $ps->[0]->{id};
         die Dumper $rem_parent_id if ref $rem_parent_id;
         $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex,
-        rem_file_id, rem_parent_id, rem_md5_hex,
+        rem_file_id, rem_parent_id, rem_md5_hex,rem_download_md5_hex,
         act_epoch,act_action)
-            VALUES (?,?,?,?,?,?,?,?,?)',$loc_pathname,$loc_size,$loc_mod,_get_rem_value($remote_file,'md5Checksum'),
-            _get_rem_value($remote_file,'id'),$rem_parent_id,_get_rem_value($remote_file,'md5Checksum'),
+            VALUES (?,?,?,?,?,?,?,?,?,?)',$loc_pathname,$loc_size,$loc_mod,_get_rem_value($remote_file,'md5Checksum'),
+            _get_rem_value($remote_file,'id'),$rem_parent_id,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),
             time,'download');
     } elsif ( $s eq 'up' && $loc_size && $loc_size > 0 ) {
         print "$loc_pathname ..uploading\n";
@@ -699,15 +700,15 @@ sub _handle_sync{
              time,'upload');
         }
     } elsif ( $s eq 'ok' ) {
-        print $loc_pathname," ..ok\n";
-        my ($act_epoch, $act_action) = (0,'register');
-        my $tmp = $self->db->query('select * from files_state where loc_pathfile = ?', $loc_pathname);
-        if (ref $tmp && $tmp->{act_epoch}) {
-        	$act_epoch = $tmp->{act_epoch};
-        	$act_action = $tmp->{act_action};
-        }
-       	$self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,rem_file_id,rem_md5_hex,act_epoch,act_action) VALUES(?,?,?,?,?,?,?)'
-            ,$loc_pathname,$loc_size,$loc_mod,_get_rem_value($remote_file,'id'),_get_rem_value($remote_file,'md5Checksum'),$act_epoch, $act_action);
+#        print $loc_pathname," ..ok\n";
+#        my ($act_epoch, $act_action) = (0,'register');
+#        my $tmp = $self->db->query('select * from files_state where loc_pathfile = ?', $loc_pathname);
+#        if (ref $tmp && $tmp->{act_epoch}) {
+#        	$act_epoch = $tmp->{act_epoch};
+#        	$act_action = $tmp->{act_action};
+#        }
+#       	$self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,rem_file_id,rem_md5_hex,rem_download_md5_hex,act_epoch,act_action) VALUES(?,?,?,?,?,?,?,?)'
+#            ,$loc_pathname,$loc_size,$loc_mod,_get_rem_value($remote_file,'id'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),$act_epoch, $act_action);
     } elsif ($s eq 'cleanup') {
     #
     } else {
@@ -735,16 +736,6 @@ sub _get_file_object_id_by_local_file {
 	return $ids[$parent_lockup]; # root is the last one
 }
 
-# _string2perlenc
-# Get takes string from "remote" like title and decod it.
-# sub _string2perlenc {
-# 	my $self = shift;
-# 	my $rstring = shift;
-#     return if ! defined $rstring;
-#
-#     die $rstring if ! utf8::decode($rstring);
-# 	return $rstring;
-# }
 ######################################################################################
 ######################################################################################
 #                                  DELTA CODE
@@ -765,14 +756,22 @@ Ensure the local path exists
 sub local_construct_path {
     my $self = shift;
     my $rem_object = shift;
-    my $i =0;
+    confess"undef ".($rem_object//'__UNDEF__') if ! ref $rem_object;
+    confess "No id" if ! _get_rem_value($rem_object,'id') && ! _get_rem_value($rem_object,'title');
+        my $i =0;
     my $parent_id = _get_rem_value($rem_object,'parents')->[0]->{id};
     my @r=_string2perlenc(_get_rem_value($rem_object,'title'));
+
+    if (!$parent_id ) {
+    	warn "NO PARENTID for "._get_rem_value($rem_object,'title');
+		return; # file is not placed in any folder. Ignore.
+    }
 
     while (1) {
         $i++;
         if (!$parent_id || $parent_id eq 'root') {
-        	warn Dumper $rem_object->file_metadata;
+        	p $rem_object;
+        	warn Dumper $rem_object->{data};
         	confess('Place file in root');
         	#last;
         }

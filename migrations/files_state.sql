@@ -1,3 +1,10 @@
+-- 2 up
+alter table files_state ADD rem_download_md5_hex text;
+
+-- 2 down
+
+alter table files_state DROP rem_download_md5_hex;
+
 -- 1 up
 create table if not exists files_state (
   id    integer primary key autoincrement,
