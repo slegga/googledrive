@@ -232,7 +232,7 @@ sub mirror {
 		    say "$page: $lastnum";
 		    $page++;
 		}
-		@remote_changed_obj = grep { _get_rem_value($_,'kind') eq 'drive#file' } @remote_changed_obj;
+		@remote_changed_obj = grep { _get_rem_value($_,'kind') eq 'drive#file' && _get_rem_value($_,'quotaBytesUsed') > 0 } @remote_changed_obj;
 
 		# look for duplicates
 		my %seen;
@@ -464,8 +464,12 @@ sub _should_sync {
 
     my ($loc_size,$loc_mod)  = ( stat($loc_pathname ) )[7,9];
     my $rem_mod = $date_time_parser->parse_datetime( _get_rem_value($remote_file,'modifiedDate') )->epoch();
-	my $rffs = _get_rem_value($remote_file,'fileSize'); #object or hash
-	return 'down' if ! defined $loc_mod;
+#	my $rffs = _get_rem_value($remote_file,'fileSize'); #object or hash
+	if (! defined $loc_mod ) {
+		return 'ok' if ! $rem_mod;
+		say Dumper $self->net_google_drive_simple->file_metadata($remote_file->id);
+		return 'down';
+	}
 	my $filedata = $self->db->query('select * from files_state where loc_pathfile = ?',$loc_pathname )->hash;
 
 	my $loc_md5_hex;
