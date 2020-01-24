@@ -71,6 +71,7 @@ sub _return_new_file_metadata_from_filename {
 			md5Checksum => md5_hex($remote_filename),
 			mimeType => (-d "$file" ? 'application/vnd.google-apps.folder':'html/text'),
 			kind => 'drive#' .(-d "$file" ?'folder' :'file' ),
+			quotaBytesUsed => 100,
 		};
 	if ($remote_filename eq '/') {
 		$value->{is_folder}='1',

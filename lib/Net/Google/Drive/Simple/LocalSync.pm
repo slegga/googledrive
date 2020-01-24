@@ -467,7 +467,7 @@ sub _should_sync {
 #	my $rffs = _get_rem_value($remote_file,'fileSize'); #object or hash
 	if (! defined $loc_mod ) {
 		return 'ok' if ! $rem_mod;
-		say Dumper $self->net_google_drive_simple->file_metadata($remote_file->id);
+		say Dumper $self->net_google_drive_simple->file_metadata(_get_rem_value($remote_file,'id'));
 		return 'down';
 	}
 	my $filedata = $self->db->query('select * from files_state where loc_pathfile = ?',$loc_pathname )->hash;
