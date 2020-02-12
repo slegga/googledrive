@@ -512,8 +512,11 @@ sub _should_sync {
     	$loc_md5_hex = md5_hex(path($local_file)->slurp);
     }
 
-	# filediffer up or down?
-    if ( ($loc_md5_hex//-1) eq (_get_rem_value($remote_file,'md5Checksum')//-1) ) {
+	my $new_rem_md5 = (_get_rem_value($remote_file,'md5Checksum')//-1);
+
+    if ( ($loc_md5_hex//-1) eq $new_rem_md5 ||
+    	($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex})
+    	) {
     	say "Equal md5 ok $loc_pathname" if $self->debug;
     	if (! defined $loc_md5_hex) {
     		$self->db->query('delete from files_state where loc_filepath = ?', $loc_pathname);
@@ -637,8 +640,9 @@ sub _handle_sync{
             move($tmpfile, $loc_pathname);
 			 if (-f $loc_pathname) {
  	            say "success download $loc_pathname";
+ 	            my $md5_local = md5_hex($loc_pathname);
  	            $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_Epoch,loc_md5_hex,rem_md5_hex,rem_download_md5_hex,rem_file_id,rem_mod_epoch) VALUES(?,?,?,?,?,?,?,?)',$loc_pathname,_get_rem_value($remote_file,'fileSize'),
- 	            time,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'id',time));
+ 	            time,$md5_local,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'id',time));
 			 } else {
 			 	die "ERROR DOWNLOAD $loc_pathname";
 			 }
