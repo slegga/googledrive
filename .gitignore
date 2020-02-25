@@ -1,5 +1,6 @@
 *.ptkdb
 *.bak
+*.swp
 /t/local/
 /t/remote/
 /t/data/
