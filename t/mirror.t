@@ -115,6 +115,7 @@ sleep 1;
 
 {
     #read directory structure again after changes
+	$DB::single=2;
     my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
         remote_root => path('/'),
         local_root  => $home,

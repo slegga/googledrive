@@ -469,6 +469,8 @@ sub _should_sync {
 		return 'ok' if ! $rem_mod;
 		say Dumper $self->net_google_drive_simple->file_metadata(_get_rem_value($remote_file,'id'));
 		return 'down';
+	} elsif(! defined $rem_mod ) {
+		return 'up';
 	}
 	my $filedata = $self->db->query('select * from files_state where loc_pathfile = ?',$loc_pathname )->hash;
 
@@ -516,7 +518,7 @@ sub _should_sync {
 
     if ( ($loc_md5_hex//-1) eq $new_rem_md5 ||
     	($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex}) ||
-        ($rem_mod < $loc_mod && $loc_md5_hex//'' eq $filedata->{loc_md5_hex}//'')
+        (($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//'')))
     	) {
     	say "Equal md5 ok $loc_pathname" if $self->debug;
     	if (! defined $loc_md5_hex) {
@@ -541,18 +543,12 @@ sub _should_sync {
     return 'up'   if _get_rem_value($remote_file,'fileSize') == 0;
 
     if($self->old_time>$rem_mod && $self->old_time>$loc_mod ) {
-        #        if ( $filedata->{rem_md5_hex} ne (_get_rem_value($remote_file,'md5Checksum')//-1) && 
-        #                $filedata->{rem_md5_hex} ne $loc_md5_hex) {
-            say "CONFLICT LOCAL VS REMOTE CHANGED AFTER LAST SYNC $loc_pathname";
-            my $conflict_bck = $self->conflict_move_dir->child($loc_pathname);
-            $conflict_bck->dirname->make_path;
-           	move($loc_pathname, _string2perlenc($conflict_bck->to_string));
-       	    say "LOCAL FILE MOVED TO "._string2perlenc($conflict_bck->to_string);
-           	return 'down';
-            #        } else {
-            #            # files on both sides is known
-            #            return 'ok;'
-            #        }
+        say "CONFLICT LOCAL VS REMOTE CHANGED AFTER LAST SYNC $loc_pathname";
+        my $conflict_bck = $self->conflict_move_dir->child($loc_pathname);
+        $conflict_bck->dirname->make_path;
+       	move($loc_pathname, _string2perlenc($conflict_bck->to_string));
+   	    say "LOCAL FILE MOVED TO "._string2perlenc($conflict_bck->to_string);
+       	return 'down';
     }
     if ( -f $local_file and $rem_mod < $loc_mod ) {
         return 'up';
@@ -715,17 +711,7 @@ sub _handle_sync{
              time,'upload');
         }
     } elsif ( $s eq 'ok' ) {
-#        print $loc_pathname," ..ok\n";
-#        my ($act_epoch, $act_action) = (0,'register');
-#        my $tmp = $self->db->query('select * from files_state where loc_pathfile = ?', $loc_pathname);
-#        if (ref $tmp && $tmp->{act_epoch}) {
-#        	$act_epoch = $tmp->{act_epoch};
-#        	$act_action = $tmp->{act_action};
-#        }
-#       	$self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,rem_file_id,rem_md5_hex,rem_download_md5_hex,act_epoch,act_action) VALUES(?,?,?,?,?,?,?,?)'
-#            ,$loc_pathname,$loc_size,$loc_mod,_get_rem_value($remote_file,'id'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),$act_epoch, $act_action);
     } elsif ($s eq 'cleanup') {
-    #
     } else {
         die "Unimplemented '$s'";
     }
