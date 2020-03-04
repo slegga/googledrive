@@ -520,7 +520,10 @@ sub _should_sync {
     	($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex}) ||
         (($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//'')))
     	) {
-    	say "Equal md5 ok $loc_pathname" if $self->debug;
+    	say "Equal md5 ok $loc_pathname  ($loc_md5_hex//-1) eq $new_rem_md5" if ($loc_md5_hex//-1) eq $new_rem_md5;
+    	say "Equal md5 ok $loc_pathname  ($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex})" if ($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex});
+    	say "Equal md5 ok $loc_pathname  ($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//''))" if ($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//''));
+
     	if (! defined $loc_md5_hex) {
     		$self->db->query('delete from files_state where loc_filepath = ?', $loc_pathname);
     		return 'cleanup';
@@ -532,8 +535,7 @@ sub _should_sync {
          	$act_epoch = $tmp->{act_epoch};
          	$act_action = $tmp->{act_action};
          }
-     	$self->db->query('replace into files_state ( loc_pathfile,loc_size, loc_mod_epoch, loc_tmp_md5_hex,rem_file_id,rem_md5_hex,act_epoch,act_action ) VALUES(?,?,?,?,?,?,?,?)',$loc_pathname,$loc_size,$loc_mod,$loc_md5_hex,_get_rem_value($remote_file,'id'), _get_rem_value($remote_file,'md5Checksum'),$act_epoch,$act_action);
- 		return 'ok';
+ 		return 'ok_refresh';
     }
 
 	#If a file is empty try to get it from other side
@@ -555,7 +557,7 @@ sub _should_sync {
     } elsif (($filedata->{rem_download_md5_hex}//'__UNDEF__') eq (_get_rem_value($remote_file,'md5Checksum')//'__UNDEF__')) {
         return 'ok';
     } else  {
-    	'down';
+    	return 'down';
     }
 }
 
@@ -712,6 +714,9 @@ sub _handle_sync{
         }
     } elsif ( $s eq 'ok' ) {
     } elsif ($s eq 'cleanup') {
+    } elsif ($s eq 'ok_refresh') {
+    	my $md5_hex = md5_hex($loc_pathname);
+     	$self->db->query('replace into files_state ( loc_pathfile,loc_size, loc_mod_epoch, loc_tmp_md5_hex,rem_file_id,rem_md5_hex,act_epoch,act_action ) VALUES(?,?,?,?,?,?,?,?)',$loc_pathname,$loc_size,$loc_mod,$md5_hex,_get_rem_value($remote_file,'id'), _get_rem_value($remote_file,'md5Checksum'),time,'refresh');
     } else {
         die "Unimplemented '$s'";
     }
@@ -772,7 +777,7 @@ sub local_construct_path {
         $i++;
         if (!$parent_id || $parent_id eq 'root') {
         	p $rem_object;
-        	warn Dumper $rem_object->{data};
+#        	warn Dumper $rem_object->{data};
         	confess('Place file in root');
         	#last;
         }
