@@ -10,7 +10,7 @@ use lib "$FindBin::Bin/../lib";
 use Net::Google::Drive::Simple::LocalSync;
 #use Net::Google::Drive;
 
-# stein@minnepinne:~/git/googledrive$ bin/get_remote_object_by_path.pl /Familie/sopp.md
+# user@minnepinne:~/git/googledrive$ bin/get_remote_object_by_path.pl /Familie/sopp.md
 
 my $home = path($ENV{HOME});
 # requires a ~/.google-drive.yml file containing an access token,
