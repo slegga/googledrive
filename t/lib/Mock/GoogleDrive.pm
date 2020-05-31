@@ -125,7 +125,7 @@ sub get_remote_name_from_full_path{
 sub search{
 	my $self = shift;
 	my ($c,$d,$search) = @_;
-	warn 'search '. join(',',@_);
+#	warn 'search '. join(',',@_);
 	my @return;
 	if ( $search =~ /^(\w+)\s*>\s*\'([\w\-\:]+)\'\s*[aA][nN][dD]\s*(\w+)\s*<\s*\'([\w\-\:]+)\'$/) {
 		my ($key1,$value1,$key2,$value2) =($1,$2,$3,$4);
@@ -222,7 +222,7 @@ sub file_upload {
 sub download {
 	say STDERR __SUB__.' '. join(',',@_);
 	my( $self, $url, $local_file_name ) = @_;
-	warn Dumper $url;
+#	warn Dumper $url;
 	copy($url->{downloadUrl},$local_file_name);
 	return 'ok';
 }

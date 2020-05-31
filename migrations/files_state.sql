@@ -1,5 +1,5 @@
 -- 2 up
---alter table files_state ADD rem_download_md5_hex text;
+alter table files_state ADD rem_download_md5_hex text;
 
 -- 2 down
 
