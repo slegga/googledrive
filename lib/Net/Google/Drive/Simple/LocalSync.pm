@@ -259,7 +259,7 @@ sub mirror {
 			 	    splice @remote_changed_obj,$i,1;
 					next;
 				}
-		    			    	say STDERR "DUPLICATES IN REMOTE '$string' '$seen{$string}'!!";
+		     	say STDERR "DUPLICATES IN REMOTE '$string' '$seen{$string}'!!";
 		    	say STDERR "CANDIDATE 1";
 		    	my $cand1 = $self->net_google_drive_simple->file_metadata($seen{$string});
 		    	say STDERR Dumper $cand1;
@@ -295,7 +295,6 @@ sub mirror {
 			my %rem_exists = map{ _get_rem_value($_, 'id'), _get_rem_value($_,'title')} grep {defined $_} @remote_changed_obj;
 			while( my ($key,$value) = each  %cache) {
 				next if ! keys %$value;
-#				warn Dumper $value;
 				if (! $rem_exists{$value->{rem_file_id}} ) {
 					say STDERR "DELETED AT REMOTE delete local ".$value->{loc_pathfile};
 			        my $conflict_bck = $self->conflict_move_dir->child($value->{loc_pathfile});
@@ -401,7 +400,6 @@ sub remote_make_path {
 		}
 	}
 	if (!$did) {
-#			die "$lfs does not exists in ". Dumper  $remote_dirs;
 			$did = $self->remote_make_path($locfol);
 	}
 	my $basename = _string2perlenc($path_mf->basename);
@@ -431,8 +429,6 @@ sub _get_rem_value {
         confess 'Call _get_rem_value with out $self->';
     }
 	return $remote_file->$key if $remote_file->can($key);
-#	print STDERR "NOT FOUND $key..".ref($remote_file)."\n";
-	#warn Dumper $remote_file;
 	return $remote_file->{data}->{$key} if exists $remote_file->{data}->{$key}; #problems with perl 5.26.3
 	return if $key eq 'downloadUrl';
 	p $remote_file;
@@ -467,7 +463,7 @@ sub _should_sync {
 #	my $rffs = _get_rem_value($remote_file,'fileSize'); #object or hash
 	if (! defined $loc_mod ) {
 		return 'ok' if ! $rem_mod;
-		say Dumper $self->net_google_drive_simple->file_metadata(_get_rem_value($remote_file,'id'));
+	#	say Dumper $self->net_google_drive_simple->file_metadata(_get_rem_value($remote_file,'id'));
 		return 'down';
 	} elsif(! defined $rem_mod ) {
 		return 'up';
@@ -520,9 +516,9 @@ sub _should_sync {
     	($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex}) ||
         (($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//'')))
     	) {
-    	say "Equal md5 ok $loc_pathname  ($loc_md5_hex//-1) eq $new_rem_md5" if ($loc_md5_hex//-1) eq $new_rem_md5;
-    	say "Equal md5 ok $loc_pathname  ($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex})" if ($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex});
-    	say "Equal md5 ok $loc_pathname  ($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//''))" if ($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//''));
+ #   	say "Equal md5 ok $loc_pathname  ($loc_md5_hex//-1) eq $new_rem_md5" if ($loc_md5_hex//-1) eq $new_rem_md5;
+ #   	say "Equal md5 ok $loc_pathname  ($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex})" if ($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex});
+ #   	say "Equal md5 ok $loc_pathname  ($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//''))" if ($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//''));
 
     	if (! defined $loc_md5_hex) {
     		$self->db->query('delete from files_state where loc_filepath = ?', $loc_pathname);
@@ -673,7 +669,6 @@ sub _handle_sync{
         print "$loc_pathname ..uploading\n";
         say "Folder_id set to ".($folder_id//-1);
         my $md5_hex = md5_hex($loc_pathname);
-#        die Dumper $remote_file if ref $remote_file eq 'HASH';
 		if (!$folder_id && $remote_file && _get_rem_value($remote_file,'parents')) {
 			my $p = _get_rem_value($remote_file,'parents');
 			if (@$p >1) {
@@ -777,7 +772,6 @@ sub local_construct_path {
         $i++;
         if (!$parent_id || $parent_id eq 'root') {
         	p $rem_object;
-#        	warn Dumper $rem_object->{data};
         	confess('Place file in root');
         	#last;
         }
