@@ -5,7 +5,8 @@ use FindBin;
 use Mojo::File 'path';
 use Data::Printer;
 use Data::Dumper;
-
+use utf8;
+use open qw(:std :utf8);
 use lib "$FindBin::Bin/../lib";
 use Net::Google::Drive::Simple::LocalSync;
 #use Net::Google::Drive;
