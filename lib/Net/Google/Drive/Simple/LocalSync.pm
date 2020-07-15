@@ -87,7 +87,6 @@ has conflict_move_dir => sub{ path($ENV{HOME},'.googledrive','conflict-removed')
 has recursive_counter => 0;
 has new_time => sub{time()};
 has 'time';
-has 'auto'; # continue with full if not possible with delta
 has 'mode';
 has 'debug'; #print debug info
 has user => sub{
@@ -538,7 +537,7 @@ sub _should_sync {
     	($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex}) ||
         (($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//'')))
     	) {
- 
+
     	if (! defined $loc_md5_hex) {
     		$self->db->query('delete from files_state where loc_filepath = ?', $loc_pathname);
     		return 'cleanup';
