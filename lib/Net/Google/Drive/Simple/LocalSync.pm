@@ -18,6 +18,7 @@ use File::Flock::Tiny;
 use FindBin;
 use lib "FindBin::Bin/../lib";
 use Carp::Always;
+use YAML::Tiny;
 binmode STDOUT, ':encoding(UTF-8)';
 our $VERSION = '0.54';
 
@@ -86,6 +87,7 @@ has conflict_move_dir => sub{ path($ENV{HOME},'.googledrive','conflict-removed')
 has recursive_counter => 0;
 has new_time => sub{time()};
 has 'time';
+has 'auto'; # continue with full if not possible with delta
 has 'mode';
 has 'debug'; #print debug info
 has user => sub{
@@ -133,11 +135,33 @@ Jump over google docs files.
 =cut
 
 sub mirror {
-    my ($self, $mode) = @_; #mode can be delta(default), pull, push or full
+    my ($self, $mode,$auto) = @_; #mode can be delta(default), pull, push or full
     my $lockfile = $self->lockfile;
     my $lock = File::Flock::Tiny->trylock($lockfile);
 	die "Lockfile locked wait for release" if ! $lock;
     $mode = 'delta' if ! $mode;
+
+    if ($mode ne 'full' && $mode ne 'pull') {
+        my $children = $self->net_google_drive_simple->children( "/Apps/", { maxResults => 10 } );
+        if ( ref $children) { # frame the tests.
+            my ($file) = grep {ref $_ && ! _get_rem_value($_,'is_folder') && _get_rem_value($_,'title') eq 'googledrive.yml' } @$children ;
+            my $yamldata = $self->net_google_drive_simple->download( $file);
+            if (! defined $yamldata) {
+                warn "NOT FOUND '/Apps/googledrive.yml'";
+            } else {
+                my $no_delta_before = YAML::Tiny::Load($yamldata)->{no_delta_before};
+                my $last_full = $self->db->query('select value from replication_state_int where key=\'full_sync_epoch\'')->hash->{value};
+                if ($no_delta_before > $last_full) {
+                    if (! $auto) {
+                        die "MUST RUN full BEFORE delta/push";
+                    } else {
+                        $mode='full';
+                    }
+                }
+            }
+        }
+    }
+
     $self->mode($mode) if ! $self->mode;
     if ($mode eq 'full') {
         my $path = path("$FindBin::Bin/../")->child('migrations', 'files_state.sql');
@@ -334,10 +358,7 @@ sub mirror {
         my $remote_file_id = $self->_get_file_object_id_by_local_file($local_file);
         my $rem_object;
         $rem_object = $self->net_google_drive_simple->file_metadata($remote_file_id) if $remote_file_id;
-        #_get_remote_metadata_from_local_filename($key);
         $rem_object = undef if ref $rem_object eq 'ARRAY' && @$rem_object == 0;
-#        $rem_object = $self->net_google_drive_simple->data_factory($rem_object) if ref $rem_object eq 'HASH';
-#		next if ! $rem_object;
     	next if ref $rem_object && ! _get_rem_can($rem_object,'downloadUrl'); # ignore google documents
         $self->_handle_sync($rem_object, $local_file) if  $lc{$key}{sync};
     }
@@ -517,10 +538,7 @@ sub _should_sync {
     	($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex}) ||
         (($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//'')))
     	) {
- #   	say "Equal md5 ok $loc_pathname  ($loc_md5_hex//-1) eq $new_rem_md5" if ($loc_md5_hex//-1) eq $new_rem_md5;
- #   	say "Equal md5 ok $loc_pathname  ($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex})" if ($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex});
- #   	say "Equal md5 ok $loc_pathname  ($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//''))" if ($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//''));
-
+ 
     	if (! defined $loc_md5_hex) {
     		$self->db->query('delete from files_state where loc_filepath = ?', $loc_pathname);
     		return 'cleanup';
