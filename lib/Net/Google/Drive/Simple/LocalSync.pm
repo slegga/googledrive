@@ -19,7 +19,7 @@ use FindBin;
 use lib "FindBin::Bin/../lib";
 use Carp::Always;
 use YAML::Tiny;
-binmode STDOUT, ':encoding(UTF-8)';
+use open qw(:std :utf8);
 our $VERSION = '0.54';
 
 =head1 NAME
