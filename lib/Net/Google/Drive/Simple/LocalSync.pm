@@ -453,7 +453,7 @@ sub _get_rem_value {
 	return $remote_file->{data}->{$key} if exists $remote_file->{data}->{$key}; #problems with perl 5.26.3
 	return if $key eq 'downloadUrl';
 	p $remote_file;
-	die "Can not find $key";
+	die "Can not find $key on object " . ref($remote_file). ". Dump: ".Dumper $remote_file;
 	return;
 }
 
