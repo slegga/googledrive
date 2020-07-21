@@ -533,9 +533,9 @@ sub _should_sync {
 
 	my $new_rem_md5 = (_get_rem_value($remote_file,'md5Checksum')//-1);
 
-    if ( ($loc_md5_hex//-1) eq $new_rem_md5 ||
-    	($rem_mod > $loc_mod && $new_rem_md5 eq $filedata->{rem_md5_hex}) ||
-        (($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//'')))
+    if ( ($loc_md5_hex//'') eq ($new_rem_md5//'x') ||
+    	($rem_mod > $loc_mod && ($new_rem_md5//'') eq ($filedata->{rem_md5_hex})//'x') ||
+        (($rem_mod < $loc_mod) && (($loc_md5_hex//'') eq ($filedata->{loc_md5_hex}//'x')))
     	) {
 
     	if (! defined $loc_md5_hex) {
