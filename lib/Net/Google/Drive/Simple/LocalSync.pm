@@ -324,7 +324,7 @@ sub mirror {
 			        $conflict_bck->dirname->make_path;
 			       	move($value->{loc_pathfile}, _string2perlenc($conflict_bck->to_string));
 			       	delete $lc{$value->{loc_pathfile}};
-			       	say "TODO: LEGG INN I EN LOKAL SLETTE LISTE SÅ DET IKKE BLIR UPLOADET I EN KARANTENE PERIODE";
+#			       	say "TODO: LEGG INN I EN LOKAL SLETTE LISTE SÅ DET IKKE BLIR UPLOADET I EN KARANTENE PERIODE";
 					$self->db->query( "delete from files_state where loc_pathfile = ?", $value->{loc_pathfile});
 				}
 			}
