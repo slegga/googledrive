@@ -141,7 +141,7 @@ sub mirror {
     $mode = 'delta' if ! $mode;
 
     if ($mode ne 'full' && $mode ne 'pull') {
-        my $children = $self->net_google_drive_simple->children( "/Apps/", { maxResults => 10 } );
+        my $children = $self->net_google_drive_simple->children( "/Apps", { maxResults => 10 } );
         if ( ref $children) { # frame the tests.
             my ($file) = grep {ref $_ && ! _get_rem_value($_,'is_folder') && _get_rem_value($_,'title') eq 'googledrive.yml' } @$children ;
             my $yamldata = $self->net_google_drive_simple->download( $file);
@@ -453,8 +453,9 @@ sub _get_rem_value {
 	return $remote_file->{data}->{$key} if exists $remote_file->{data}->{$key}; #problems with perl 5.26.3
 	return if $key eq 'downloadUrl';
 	p $remote_file;
-	die "Can not find $key";
-	return;
+	warn "Can not find $key on object " . ref($remote_file). ". Dump: ".Dumper $remote_file;
+	return if $key eq 'is_folder';
+	die;
 }
 
 sub _get_rem_can {
@@ -717,7 +718,7 @@ sub _handle_sync{
         	$rem_file_id = $self->net_google_drive_simple->file_upload( $loc_pathname, $folder_id);
         }
         print "$_;" for( $loc_pathname,$loc_size,$loc_mod, $md5_hex,
-            ,$folder_id, $md5_hex, time,'upload');
+            ,$folder_id, $md5_hex, time,'UPLOADED');
         print "\n\n";
         if ($rem_file_id) {
          	$self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_epoch,loc_md5_hex, rem_file_id, rem_parent_id, rem_md5_hex, act_epoch,act_action)
