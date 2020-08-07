@@ -53,16 +53,28 @@ sub force_full_update_next {
         if ($cont[$i] =~/^no_delta_before\:/) {
             $cont[$i] = 'no_delta_before: ' . time;
         }
+        $cont[$i].="\n";
     }
     $datafile->spurt(@cont);
-    my $file = clone $datafile;
-    for my $i ( @{ $self->local_root }) {
-        shift @$file;
-    }
-    my @ids = $self->net_google_drive_simple->path_resolve("$file");
-    $self->net_google_drive_simple->file_upload( $datafile, $ids[-2], $ids[-1] );
+    my $rfile = $self->pathlocal2remote($datafile);
+    say "$rfile";
+    my ($fileid,$dirid,@ids) = $self->net_google_drive_simple->path_resolve("$rfile");
+    die if ! $dirid;
+    say join('*',$fileid,$dirid,@ids);
+    $self->net_google_drive_simple->file_upload( "$datafile", $dirid, $fileid );
 
     # TODO: force push $datafile;
+}
+
+sub pathlocal2remote {
+    my ( $self, $mflpath ) = @_;
+    my @fileparts = @{ $mflpath->to_array };
+#    say join(':',@fileparts);
+    for my $i ( @{ $self->local_root->to_array }) {
+        shift @fileparts;
+    }
+#    say join(':',@fileparts);
+    return Mojo::File->new('/',@fileparts);
 }
 
 sub main {
@@ -87,9 +99,10 @@ sub main {
             die "Not a file $f" if ! -f $f;
             my $r = '^' . $self->local_root->to_string;
             die "Not in $ENV{HOME}/googledrive $f" if $f !~ /$r/;
-            my @ids = $self->net_google_drive_simple->path_resolve("$f");
-            say "$self->net_google_drive_simple->file_delete( $ids[-1] )";
-            say 'unlink "$f" '.$f;
+            my $rfile = $self->pathlocal2remote($f);
+            my ($fileid,$dirid,@ids) = $self->net_google_drive_simple->path_resolve("$rfile");
+            $self->net_google_drive_simple->file_delete( $fileid );
+            unlink "$f";
         }
         $self->force_full_update_next;
     }
