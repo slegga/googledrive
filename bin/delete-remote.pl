@@ -81,6 +81,7 @@ sub main {
     my $self = shift;
     my @e = @{ $self->extra_options };
     my $curpath = path;
+    $self->force_full_update_next;
     for my $finput (@e) {
         my @files;
         if ($finput !~ /^\// && $finput !~ /\*/) {
@@ -93,19 +94,21 @@ sub main {
         }
 
         # verify and handle delete
-        $self->force_full_update_next;
         for my $f(@files) {
-            ... if -d $f;
-            die "Not a file $f" if ! -f $f;
+            if (-d $f) {
+                die "Dir is not empty $f" if $f->list({dir=>1})->each;
+            }
+            die "File $f does not exists" if ! -e $f;
             my $r = '^' . $self->local_root->to_string;
             die "Not in $ENV{HOME}/googledrive $f" if $f !~ /$r/;
             my $rfile = $self->pathlocal2remote($f);
             my ($fileid,$dirid,@ids) = $self->net_google_drive_simple->path_resolve("$rfile");
+            die "No file id for $rfile" if ! $fileid;
             $self->net_google_drive_simple->file_delete( $fileid );
             unlink "$f";
         }
-        $self->force_full_update_next;
     }
+    $self->force_full_update_next;
 
 }
 

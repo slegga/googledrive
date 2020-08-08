@@ -586,7 +586,7 @@ sub _string2perlenc {
     #$malformed_utf8 =~ s/[\x{9}\x{A}\x{D}\x{20}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/_/;
     #$malformed_utf8=~s/Ã.+//;
 	my $return;
-    if ($string =~ /[\xC3\x{FFFD}]/) { # used by utf8
+    if ($string =~ /[\xC3\x{FFFD}\x{C3B8}\x{C2}]/) { # used by utf8
         $return = decode('UTF-8', $string, Encode::FB_DEFAULT);
     } else {
         $return = decode('ISO-8859-1', $string);
