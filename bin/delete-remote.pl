@@ -30,6 +30,11 @@ use Clone 'clone';
 
 delete-remote.pl - Delete or move remote files.
 
+=head1 SYNOPSIS
+
+    cd ~/googledrive
+    delete-remot.pl path/file
+
 =head1 DESCRIPTION
 
 Delete or remove remote files. Script delete given file remote and locally and update no_delta_before value so other clients is forced to do a full update next time. This should stop the file to reoccur after file is deleted remote.
