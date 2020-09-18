@@ -21,6 +21,8 @@ use Carp::Always;
 use YAML::Tiny;
 binmode STDOUT, ':encoding(UTF-8)';
 use open qw/:std :encoding(UTF-8)/;
+use v5.26;
+use Devel::Peek;
 our $VERSION = '0.54';
 
 =head1 NAME
@@ -144,7 +146,7 @@ sub mirror {
     if ($mode ne 'full' && $mode ne 'pull') {
         my $children = $self->net_google_drive_simple->children( "/Apps", { maxResults => 10 } );
         if ( ref $children) { # frame the tests.
-            my ($file) = grep {ref $_ && ! _get_rem_value($_,'is_folder') && _get_rem_value($_,'title') eq 'googledrive.yml' } @$children ;
+            my ($file) = grep {ref $_ && _get_rem_value($_,'kind') eq 'drive#file' && _get_rem_value($_,'title') eq 'googledrive.yml' } @$children ;
             my $yamldata = $self->net_google_drive_simple->download( $file);
             if (! defined $yamldata) {
                 warn "NOT FOUND '/Apps/googledrive.yml'";
@@ -664,6 +666,11 @@ sub _handle_sync{
  	            my $md5_local = md5_hex($loc_pathname);
  	            $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_Epoch,loc_md5_hex,rem_md5_hex,rem_download_md5_hex,rem_file_id,rem_mod_epoch) VALUES(?,?,?,?,?,?,?,?)',$loc_pathname,_get_rem_value($remote_file,'fileSize'),
  	            time,$md5_local,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'id',time));
+ 	            my ($realfile) = glob($loc_pathname);
+ 	            if (! $realfile) {
+                    Dump($loc_pathname);
+                    die "Tell filename is $loc_pathname but it is really missing utf8 chars";
+ 	            }
 			 } else {
 			 	die "ERROR DOWNLOAD $loc_pathname";
 			 }
