@@ -16,6 +16,8 @@ my $home = path($ENV{HOME});
 # requires a ~/.google-drive.yml file containing an access token,
 # see documentation of Net::Google::Drive::Simple
 
+die "LOCALE IS WRONG: $ENV{LANG}" if ! $ENV{LANG} =~/UTF/;
+
 my $google_docs = Net::Google::Drive::Simple::LocalSync->new(
     remote_root => path('/'),
     local_root  => $home->child('googledrive'),
