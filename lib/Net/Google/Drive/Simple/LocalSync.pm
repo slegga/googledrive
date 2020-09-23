@@ -339,7 +339,7 @@ sub mirror {
 	    for my $rem_object (@remote_changed_obj) {
 	    	next if ! defined $rem_object;
 	    	next if ! _get_rem_value($rem_object,'downloadUrl'); # ignore google documents
-	        say "Remote "._string2perlenc(_get_rem_value($rem_object,'title'));
+	        $self->print( "Remote "._string2perlenc(_get_rem_value($rem_object,'title')));
 	        #se på å slå opp i cache før construct
 	        my $lf_name = $self->local_construct_path($rem_object);
 	        next if ! $lf_name; # file has no parent.
@@ -376,8 +376,31 @@ sub mirror {
 	} elsif ($mode eq 'push') {
 		$self->db->query('replace into replication_state_int(key,value) VALUES(?,?)', "push_sync_epoch",$self->new_time);
 	}
-    say "FINISH SCRIPT " . $self->_timeused;
+    $self->print( "FINISH SCRIPT " . $self->_timeused);
 
+}
+
+=head2 print
+
+Overwrite previous line if start equal.
+
+=cut
+
+sub print {
+    my $self=shift;
+    my $txt = shift;
+    local $| = 1;
+    state $lastprint='';
+    if (length($txt)>4 && length($lastprint)>4
+    && substr ($txt,0,4) eq substr($lastprint,0,4)
+     ) {
+       print "\r". " " x length($lastprint)."\r";
+    } else {
+       # print substr ($txt,0,4)." ne ".substr($lastprint,0,4);
+    }
+    print $txt;
+    print "\n" if substr ($txt,0,4) ne substr($lastprint,0,4);
+    $lastprint = $txt;
 }
 
 sub _timeused {
@@ -853,7 +876,7 @@ sub path_resolveu {
 			unshift @ids, undef;
 			next;
 		}
-		say "part ".$part.'  ' .($folder_id//'__UNDEF__');#. Dumper $tmp; decode('ISO-8859-1',
+		$self->print( "part ".$part.'  ' .($folder_id//'__UNDEF__'));#. Dumper $tmp; decode('ISO-8859-1',
         my $children = $self->net_google_drive_simple->children_by_folder_id( $folder_id,
           { maxResults    => 100, # path resolution maxResults is different
           },
