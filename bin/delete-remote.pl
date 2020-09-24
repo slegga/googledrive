@@ -62,10 +62,10 @@ sub force_full_update_next {
     }
     $datafile->spurt(@cont);
     my $rfile = $self->pathlocal2remote($datafile);
-    say "$rfile";
+#    say "$rfile";
     my ($fileid,$dirid,@ids) = $self->net_google_drive_simple->path_resolve("$rfile");
     die if ! $dirid;
-    say join('*',$fileid,$dirid,@ids);
+#    say join('*',$fileid,$dirid,@ids);
     $self->net_google_drive_simple->file_upload( "$datafile", $dirid, $fileid );
 
     # TODO: force push $datafile;
@@ -108,8 +108,11 @@ sub main {
             die "Not in $ENV{HOME}/googledrive $f" if $f !~ /$r/;
             my $rfile = $self->pathlocal2remote($f);
             my ($fileid,$dirid,@ids) = $self->net_google_drive_simple->path_resolve("$rfile");
-            die "No file id for $rfile" if ! $fileid;
-            $self->net_google_drive_simple->file_delete( $fileid );
+            if (! $fileid) {
+                warn "No file id for $rfile"
+            } else {
+                $self->net_google_drive_simple->file_delete( $fileid );
+            }
             unlink "$f";
         }
     }
