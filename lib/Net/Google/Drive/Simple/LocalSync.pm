@@ -140,7 +140,10 @@ sub mirror {
     my ($self, $mode,$auto) = @_; #mode can be delta(default), pull, push or full
     my $lockfile = $self->lockfile;
     my $lock = File::Flock::Tiny->trylock($lockfile);
-	die "Lockfile locked wait for release" if ! $lock;
+    if (! $lock) {
+	    say "Lockfile locked wait for release";
+	    exit 401;
+	}
     $mode = 'delta' if ! $mode;
 
     if ($mode ne 'full' && $mode ne 'pull') {
@@ -322,7 +325,7 @@ sub mirror {
 			while( my ($key,$value) = each  %cache) {
 				next if ! keys %$value;
 				if (! $rem_exists{$value->{rem_file_id}} ) {
-					say STDERR "DELETED AT REMOTE delete local ".$value->{loc_pathfile};
+					say "DELETED AT REMOTE delete local ".$value->{loc_pathfile};
 			        my $conflict_bck = $self->conflict_move_dir->child($value->{loc_pathfile});
 			        $conflict_bck->dirname->make_path;
 			       	move($value->{loc_pathfile}, _string2perlenc($conflict_bck->to_string));
