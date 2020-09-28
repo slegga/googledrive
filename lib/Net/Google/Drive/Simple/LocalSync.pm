@@ -687,17 +687,37 @@ sub _handle_sync{
 			if ( ! -d _string2perlenc($local_file->dirname->to_string) ) {
 				$local_file->dirname->make_path;
 			}
-            move($tmpfile, $loc_pathname);
-			 if (-f $loc_pathname) {
- 	            say "success download $loc_pathname";
- 	            my $md5_local = md5_hex($loc_pathname);
- 	            $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_Epoch,loc_md5_hex,rem_md5_hex,rem_download_md5_hex,rem_file_id,rem_mod_epoch) VALUES(?,?,?,?,?,?,?,?)',$loc_pathname,_get_rem_value($remote_file,'fileSize'),
- 	            time,$md5_local,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'id',time));
- 	            my ($realfile) = glob($loc_pathname);
- 	            if (! $realfile) {
-                    Dump($loc_pathname);
-                    die "Tell filename is $loc_pathname but it is really missing utf8 chars";
- 	            }
+			my $x = $loc_pathname;
+#			utf8::downgrade($x) if utf8::is_utf8($x);
+#			utf8::downgrade($x);
+            move($tmpfile, $x);
+			 if (-f $x) {
+			    my $y = $x;
+			    $y=~s/ /\\ /;
+			    # if (! glob(quotemeta($y))) {
+			    if (! grep {"$_" eq $x } path($x)->dirname->list->each) {
+			        Dump $x;
+			        die "Can't find newly downloaded file $loc_pathname. $x Possible utf8 problems. ";
+			    }
+			    else {
+			        my $plain_name = (glob(quotemeta($loc_pathname)))[0];
+			        #$plain_name = encode('UTF-8',$plain_name) if ! utf8::is_utf8($plain_name); #/home/t527081/googledrive/Familie/bringebÃÂ¦rbusker-gjÃÂ¸dsling.txt
+			        #utf8::upgrade($string) if ! utf8::is_utf8($plain_name);
+			        $plain_name = decode('UTF-8', $plain_name);
+			        if ( $plain_name ne $loc_pathname ) {
+    			        Dump $loc_pathname;
+    			        die "Downloaded file $loc_pathname do not match with result: ".  $plain_name;
+    			    }
+     	            say "success download $loc_pathname";
+     	            my $md5_local = md5_hex($loc_pathname);
+     	            $self->db->query('replace into files_state (loc_pathfile,loc_size,loc_mod_Epoch,loc_md5_hex,rem_md5_hex,rem_download_md5_hex,rem_file_id,rem_mod_epoch) VALUES(?,?,?,?,?,?,?,?)',$loc_pathname,_get_rem_value($remote_file,'fileSize'),
+     	            time,$md5_local,_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'md5Checksum'),_get_rem_value($remote_file,'id',time));
+     	            my ($realfile) = glob($loc_pathname);
+     	            if (! $realfile) {
+                        Dump($loc_pathname);
+                        die "Tell filename is $loc_pathname but it is really missing utf8 chars";
+     	            }
+     	        }
 			 } else {
 			 	die "ERROR DOWNLOAD $loc_pathname";
 			 }
