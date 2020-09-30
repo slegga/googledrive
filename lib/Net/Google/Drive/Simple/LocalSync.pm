@@ -695,8 +695,9 @@ sub _handle_sync{
 			    my $y = $x;
 			    $y=~s/ /\\ /;
 			    # if (! glob(quotemeta($y))) {
-			    my @filesindir = path($x)->dirname->list->map(sub{decode('UTF-8',$_) if (! utf8::is_utf8($_))})->sort->each;
-			    if (! grep {"$_" eq $x } @filesindir) {
+			    my $px = path($x);
+			    my @filesindir = $px->dirname->list->map(sub{decode('UTF-8',$_) if (! utf8::is_utf8($_))})->sort->each;
+			    if (! grep {path($_)->basename eq $px->basename } @filesindir) {
 			        Dump $x;
 			        die "Can't find newly downloaded file $loc_pathname. Candidates:. ".join(', ', @filesindir);
 			    }

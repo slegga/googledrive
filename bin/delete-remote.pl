@@ -86,7 +86,8 @@ sub main {
     my $self = shift;
     my @e = @{ $self->extra_options };
     my $curpath = path;
-    $self->force_full_update_next;
+    my $do_force_full_update = 0;
+#    $self->force_full_update_next;
     for my $finput (@e) {
         my @files;
         if ($finput !~ /^\// && $finput !~ /\*/) {
@@ -99,6 +100,7 @@ sub main {
         }
 
         # verify and handle delete
+
         for my $f(@files) {
             if (-d $f) {
                 die "Dir is not empty $f" if $f->list({dir=>1})->each;
@@ -111,12 +113,13 @@ sub main {
             if (! $fileid) {
                 warn "No file id for $rfile"
             } else {
+                $do_force_full_update=1;
                 $self->net_google_drive_simple->file_delete( $fileid );
             }
             unlink "$f";
         }
     }
-    $self->force_full_update_next;
+    $self->force_full_update_next if $do_force_full_update;
 
 }
 
