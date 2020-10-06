@@ -769,10 +769,10 @@ sub _handle_sync{
        	my $rem_file_id;
        	if ($remote_file) {
        		my $old = $rem_file_id;
-            $rem_file_id = $self->net_google_drive_simple->file_upload( decode('UTF-8', $loc_pathname, Encode::FB_CROAK | Encode::LEAVE_SRC), $folder_id, _get_rem_value($remote_file,'id') );
+            $rem_file_id = $self->net_google_drive_simple->file_upload( $loc_pathname, $folder_id, _get_rem_value($remote_file,'id') );
             die "$old eq $rem_file_id" if ! $old eq $rem_file_id;
         } else {
-        	$rem_file_id = $self->net_google_drive_simple->file_upload( decode('UTF-8', $loc_pathname, Encode::FB_CROAK | Encode::LEAVE_SRC ), $folder_id);
+        	$rem_file_id = $self->net_google_drive_simple->file_upload( $loc_pathname, $folder_id);
         }
         print "$_;" for( $loc_pathname,$loc_size,$loc_mod, $md5_hex,
             ,$folder_id, $md5_hex, time,'UPLOADED');
