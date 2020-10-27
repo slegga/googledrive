@@ -1,0 +1,220 @@
+{
+ "kind": "drive#fileList",
+ "incompleteSearch": false,
+ "files": [
+  {
+   "kind": "drive#file",
+   "id": "1M5PL5mUQfglj1ifHogZZYxSLgnxAnLdo",
+   "name": "test",
+   "mimeType": "application/vnd.google-apps.folder"
+  },
+  {
+   "kind": "drive#file",
+   "id": "140aFqFwqFi5ToMyhEZcfBHV7ThT2fMBX",
+   "name": "test",
+   "mimeType": "application/octet-stream"
+  },
+  {
+   "kind": "drive#file",
+   "id": "1dmrFVq8p_Xd0WrqBJhAlpNTNrG_rUyd7",
+   "name": "test",
+   "mimeType": "application/octet-stream"
+  }
+ ]
+}
+
+
+root:
+
+{
+ "kind": "drive#file",
+ "id": "0ANHqv-el496wUk9PVA",
+ "name": "Min disk",
+ "mimeType": "application/vnd.google-apps.folder",
+ "starred": false,
+ "trashed": false,
+ "explicitlyTrashed": false,
+ "spaces": [
+  "drive"
+ ],
+ "version": "10628",
+ "webViewLink": "https://drive.google.com/drive/folders/0ANHqv-el496wUk9PVA",
+ "iconLink": "https://drive-thirdparty.googleusercontent.com/16/type/application/vnd.google-apps.folder",
+ "hasThumbnail": false,
+ "thumbnailVersion": "0",
+ "viewedByMe": false,
+ "createdTime": "2009-10-23T10:33:42.631Z",
+ "modifiedTime": "2013-10-19T11:06:57.289Z",
+ "modifiedByMeTime": "2013-10-19T11:06:57.289Z",
+ "modifiedByMe": true,
+ "owners": [
+  {
+   "kind": "drive#user",
+   "displayName": "Stein Hammer",
+   "photoLink": "https://lh3.googleusercontent.com/a-/AOh14GgJMxF9dF4Euk0pDy7ofScE0lSZVjYNTYQVwcCkdA=s64",
+   "me": true,
+   "permissionId": "02012076843951645005",
+   "emailAddress": "steihamm@gmail.com"
+  }
+ ],
+ "lastModifyingUser": {
+  "kind": "drive#user",
+  "displayName": "Stein Hammer",
+  "photoLink": "https://lh3.googleusercontent.com/a-/AOh14GgJMxF9dF4Euk0pDy7ofScE0lSZVjYNTYQVwcCkdA=s64",
+  "me": true,
+  "permissionId": "02012076843951645005",
+  "emailAddress": "steihamm@gmail.com"
+ },
+ "shared": false,
+ "ownedByMe": true,
+ "capabilities": {
+  "canAddChildren": true,
+  "canAddMyDriveParent": true,
+  "canChangeCopyRequiresWriterPermission": false,
+  "canChangeViewersCanCopyContent": false,
+  "canComment": true,
+  "canCopy": false,
+  "canDelete": true,
+  "canDownload": true,
+  "canEdit": true,
+  "canListChildren": true,
+  "canModifyContent": true,
+  "canMoveChildrenWithinDrive": true,
+  "canMoveItemIntoTeamDrive": true,
+  "canMoveItemOutOfDrive": true,
+  "canMoveItemWithinDrive": true,
+  "canReadRevisions": false,
+  "canRemoveChildren": true,
+  "canRemoveMyDriveParent": true,
+  "canRename": true,
+  "canShare": true,
+  "canTrash": true,
+  "canUntrash": true
+ },
+ "viewersCanCopyContent": true,
+ "copyRequiresWriterPermission": false,
+ "writersCanShare": true,
+ "permissions": [
+  {
+   "kind": "drive#permission",
+   "id": "02012076843951645005",
+   "type": "user",
+   "emailAddress": "steihamm@gmail.com",
+   "role": "owner",
+   "displayName": "Stein Hammer",
+   "photoLink": "https://lh3.googleusercontent.com/a-/AOh14GgJMxF9dF4Euk0pDy7ofScE0lSZVjYNTYQVwcCkdA=s64",
+   "deleted": false
+  }
+ ],
+ "permissionIds": [
+  "02012076843951645005"
+ ],
+ "folderColorRgb": "#8f8f8f",
+ "quotaBytesUsed": "0",
+ "isAppAuthorized": false
+}
+
+
+
+kind,id,name,mimeType,parents,modifiedTime,trashed,explicitlyTrashed
+
+
+
+
+
+
+/test
+
+
+
+{
+ "kind": "drive#file",
+ "id": "1M5PL5mUQfglj1ifHogZZYxSLgnxAnLdo",
+ "name": "test",
+ "mimeType": "application/vnd.google-apps.folder",
+ "starred": false,
+ "trashed": false,
+ "explicitlyTrashed": false,
+ "parents": [
+  "0ANHqv-el496wUk9PVA"
+ ],
+ "spaces": [
+  "drive"
+ ],
+ "version": "1",
+ "webViewLink": "https://drive.google.com/drive/folders/1M5PL5mUQfglj1ifHogZZYxSLgnxAnLdo",
+ "iconLink": "https://drive-thirdparty.googleusercontent.com/16/type/application/vnd.google-apps.folder",
+ "hasThumbnail": false,
+ "thumbnailVersion": "0",
+ "viewedByMe": true,
+ "viewedByMeTime": "2020-11-02T17:04:53.292Z",
+ "createdTime": "2020-11-02T17:04:53.292Z",
+ "modifiedTime": "2020-11-02T17:04:53.292Z",
+ "modifiedByMeTime": "2020-11-02T17:04:53.292Z",
+ "modifiedByMe": true,
+ "owners": [
+  {
+   "kind": "drive#user",
+   "displayName": "Stein Hammer",
+   "photoLink": "https://lh3.googleusercontent.com/a-/AOh14GgJMxF9dF4Euk0pDy7ofScE0lSZVjYNTYQVwcCkdA=s64",
+   "me": true,
+   "permissionId": "02012076843951645005",
+   "emailAddress": "steihamm@gmail.com"
+  }
+ ],
+ "lastModifyingUser": {
+  "kind": "drive#user",
+  "displayName": "Stein Hammer",
+  "photoLink": "https://lh3.googleusercontent.com/a-/AOh14GgJMxF9dF4Euk0pDy7ofScE0lSZVjYNTYQVwcCkdA=s64",
+  "me": true,
+  "permissionId": "02012076843951645005",
+  "emailAddress": "steihamm@gmail.com"
+ },
+ "shared": false,
+ "ownedByMe": true,
+ "capabilities": {
+  "canAddChildren": true,
+  "canAddMyDriveParent": false,
+  "canChangeCopyRequiresWriterPermission": false,
+  "canChangeViewersCanCopyContent": false,
+  "canComment": true,
+  "canCopy": false,
+  "canDelete": true,
+  "canDownload": true,
+  "canEdit": true,
+  "canListChildren": true,
+  "canModifyContent": true,
+  "canMoveChildrenWithinDrive": true,
+  "canMoveItemIntoTeamDrive": true,
+  "canMoveItemOutOfDrive": true,
+  "canMoveItemWithinDrive": true,
+  "canReadRevisions": false,
+  "canRemoveChildren": true,
+  "canRemoveMyDriveParent": true,
+  "canRename": true,
+  "canShare": true,
+  "canTrash": true,
+  "canUntrash": true
+ },
+ "viewersCanCopyContent": true,
+ "copyRequiresWriterPermission": false,
+ "writersCanShare": true,
+ "permissions": [
+  {
+   "kind": "drive#permission",
+   "id": "02012076843951645005",
+   "type": "user",
+   "emailAddress": "steihamm@gmail.com",
+   "role": "owner",
+   "displayName": "Stein Hammer",
+   "photoLink": "https://lh3.googleusercontent.com/a-/AOh14GgJMxF9dF4Euk0pDy7ofScE0lSZVjYNTYQVwcCkdA=s64",
+   "deleted": false
+  }
+ ],
+ "permissionIds": [
+  "02012076843951645005"
+ ],
+ "folderColorRgb": "#8f8f8f",
+ "quotaBytesUsed": "0",
+ "isAppAuthorized": false
+}

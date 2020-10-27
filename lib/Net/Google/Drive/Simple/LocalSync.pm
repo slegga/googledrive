@@ -703,7 +703,6 @@ sub _handle_sync{
 			    }
 			    else {
 			        my $plain_name = (glob(quotemeta($loc_pathname)))[0];
-			        #$plain_name = encode('UTF-8',$plain_name) if ! utf8::is_utf8($plain_name); #/home/t527081/googledrive/Familie/bringebÃÂ¦rbusker-gjÃÂ¸dsling.txt
 			        #utf8::upgrade($string) if ! utf8::is_utf8($plain_name);
 			        $plain_name = decode('UTF-8', $plain_name);
 			        if ( $plain_name ne $loc_pathname ) {
