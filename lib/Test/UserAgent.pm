@@ -2,6 +2,7 @@ package Test::UserAgent;
 use Mojo::Base -base, -signatures;
 use Data::Dumper;
 use Test::UserAgent::Transaction;
+use Mojo::JSON qw /to_json/;
 
 =head1 NAME
 
@@ -20,7 +21,12 @@ For unittest without accessing external apis.
 
 =cut
 
+has 'real_remote_root';
 has 'config_file';
+has 'method';
+has 'url';
+has 'header';
+has 'payload';
 
 =head1 METHODS
 
@@ -28,8 +34,30 @@ has 'config_file';
 
 =cut
 
-sub get($self,@) {
-    return Test::UserAgent::Transaction->new(method=>'GET',config_file=> $self->config_file,@_);
+sub get($self,$url,@) {
+    my %params=(method=>'GET', config_file=>$self->config_file, url=>$url);
+    if  (ref $url) {
+        $url =$url->to_string;
+    }
+    shift @_;# remove self
+    shift @_;# remove url
+    if (@_) {
+        for my $i(0 .. $#_) {
+            my $v= $_[$i];
+            if (ref $v eq 'HASH') {
+                if ($v->{Authorization}) {
+                    $v->{Authorization} = 'Bearer: X';
+                }
+                $params{header} = to_json($v);
+            } elsif (!$v) {
+                #
+            } else {
+                die "Unkown $i  $v  ".ref $v;
+            }
+        }
+    }
+    $self->$_($params{$_}) for keys %params;
+    return Test::UserAgent::Transaction->new( ua => $self );
 }
 
 =head2 post
@@ -37,7 +65,7 @@ sub get($self,@) {
 =cut
 
 sub post($self,@) {
-    return Test::UserAgent::Transaction->new(method=>'POST',config_file=> $self->config_file,@_);
+    return Test::UserAgent::Transaction->new( ua => $self );
 }
 
 

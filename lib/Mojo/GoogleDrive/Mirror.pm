@@ -8,7 +8,7 @@ use Mojo::GoogleDrive::Mirror::File;
 use Mojo::UserAgent;
 use Data::Dumper;
 use OAuth::Cmdline::GoogleDrive;
-
+use Mojo::JSON qw /decode_json/;
 =head1 NAME
 
 Mojo::GoogleDrive::Mirror
@@ -114,6 +114,41 @@ sub file_from_metadata ($self,$metadata,%opts) {
     die Dumper $self if ! $options{oauth};
     my $return = Mojo::GoogleDrive::Mirror::File->new(metadata=>$metadata, %options);
     return $return;
+}
+
+=head2 http_request
+
+    $metadata = $file->http_request(method,url,payload)
+
+Do a request and return a hash converted from returned json.
+
+=cut
+
+sub http_request($self, $method,$url,$header='',@) {
+
+
+    die Dumper $self if ! $self->{oauth};
+    my $main_header ={};
+    $main_header = $header if $header;
+    my %tmp_header = $self->{oauth}->authorization_headers();
+    $main_header->{$_} = $tmp_header{$_} for keys %tmp_header;
+#    say $main_header;
+    my @extra = @_;
+    splice @extra,0,4;
+    say $url. join('#', @extra);#, $main_header;
+    my $tx = $self->ua->$method($url, $main_header,@extra);
+    my $code = $tx->res->code;
+    if (!$code) {
+        say $url;
+        die "Timeout";
+    }
+    if ($code eq '404') {
+        die "@_     " . $tx->res->body;
+    }
+    die Dumper $tx->res if $code > 299;
+    my $return =  decode_json($tx->res->body);;
+
+    return $return
 }
 
 1;

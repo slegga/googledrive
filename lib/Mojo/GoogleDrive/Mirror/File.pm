@@ -45,12 +45,12 @@ our %metadata_all=();
 has 'pathfile';
 has 'remote_root' => '/';
 has 'local_root';# => "$ENV{HOME}/googledrive/";
-has 'api_file_url' => "https://www.googleapis.com/drive/v3/files/";
-has 'api_upload_url' => "https://www.googleapis.com/upload/drive/v3/files/";
-has 'oauth';     #     => OAuth::Cmdline::GoogleDrive->new();
-has 'sync_direction';# => 'both-cloud'; # both ways clound wins if in conflict
-has 'metadata' => sub{{}};;
-has ua => sub { Mojo::UserAgent->new};
+#has 'api_file_url' => "https://www.googleapis.com/drive/v3/files/";
+#has 'api_upload_url' => "https://www.googleapis.com/upload/drive/v3/files/";
+#has 'oauth';     #     => OAuth::Cmdline::GoogleDrive->new();
+#has 'sync_direction';# => 'both-cloud'; # both ways clound wins if in conflict
+has 'metadata' => sub{{}};
+#has ua => sub { Mojo::UserAgent->new};
 has mgm => sub { Mojo::GoogleDrive::Mirror->new()};
 
 =head2 INTERESTING_FIELDS
@@ -89,32 +89,6 @@ sub rfile($self) {
     return path($self->remote_root)->child($self->pathfile);
 }
 
-=head2 http_request
-
-    $metadata = $file->http_request(method,url,payload)
-
-Do a request and return a hash converted from returned json.
-
-=cut
-
-sub http_request($self, $method,$url,$payload='') {
-    die Dumper $self if ! $self->{oauth};
-    my $main_header = {$self->{oauth}->authorization_headers()};
-    say $url;
-    my $tx = $self->ua->$method($url, $main_header,$payload);
-    my $code = $tx->res->code;
-    if (!$code) {
-        say $url;
-        die "Timeout";
-    }
-    if ($code eq '404') {
-        die "$method, $url , $payload     " . $tx->res->body;
-    }
-    die Dumper $tx->res if $code > 299;
-    my $return =  decode_json($tx->res->body);;
-
-    return $return
-}
 
 =head2 get_metadata
 
@@ -131,13 +105,10 @@ sub get_metadata($self) {
         $metadata = $metadata_all{$self->rfile->to_string};
     }
     if (! ref $metadata || ! keys %$metadata) {
-        $metadata ={name => $self->lfile->basename};
-        my @ids;
-        @ids = $self->path_resolve();
-        if(@ids>1) {
-            $metadata->{parents}->[0] = @{$self->path_resolve()}[-2] ;
-        }
-        $metadata_all{$self->rfile->to_string} = $metadata;
+        my @pathobj;
+        @pathobj = $self->path_resolve()->each;
+#        say STDERR Dumper \@pathobj;
+        $metadata = $pathobj[$#pathobj] if @pathobj;# kunne vært get_metadata
     }
     return $metadata;
 }
@@ -164,16 +135,15 @@ sub upload {
     }
     my $metadata = $self->get_metadata;
     my $metapart = {'Content-Type' => 'application/json; charset=UTF-8', 'Content-Length'=>$byte_size, content => encode_json($metadata),};
-    my $urlstring = Mojo::URL->new($self->api_upload_url)->query(uploadType=>'multipart')->to_string;
+    my $urlstring = Mojo::URL->new($self->mgm->api_upload_url)->query(uploadType=>'multipart')->to_string;
     say $urlstring;
-    my $tx = $self->mgm->http_request('post',$urlstring, $main_header ,   multipart => [
+    my $meta = $self->mgm->http_request('post',$urlstring, $main_header ,   multipart => [
     $metapart,
     {
       'Content-Type' => $self->file_mime_type,
       content => $local_file_content,
     }
   ] );
-    my $meta =  decode_json($tx->res->body);
     my $md = $self->metadata;
     $md->{$_} = $meta->{$_} for (keys %$meta);
     $self->metadata($md);
@@ -226,9 +196,9 @@ sub path_resolve($self) {
         $root_meta = $metadata_all{'/'};
     }
     if (!$id) {
-        my $url = Mojo::URL->new($self->api_file_url)->path($parent_id)->query(fields=> INTERESTING_FIELDS );
+        my $url = Mojo::URL->new($self->mgm->api_file_url)->path($parent_id)->query(fields=> INTERESTING_FIELDS );
         say $url;
-        $root_meta = $self->http_request('get',$url,'');
+        $root_meta = $self->mgm->http_request('get',$url,'');
         $metadata_all{'/'} = $root_meta;
     }
     die "Can not find root" if !$root_meta;
@@ -236,7 +206,9 @@ sub path_resolve($self) {
     $parent_id = $root_meta->{id};
     my $tmppath=path('/');
     my $old_part='/';
+    my $i = -1;
   PART: for my $part (@parts) {
+        $i++;
         say  "Looking up part $part (folder_id=$folder_id)" if $ENV{MOJO_DEBUG};
         my $dir;
         if (exists $metadata_all{$tmppath->to_string}) {
@@ -247,18 +219,21 @@ sub path_resolve($self) {
             $dir = $self->{mgm}->file_from_metadata({id => $parent_id, name => $old_part},pathfile => $tmppath->to_string);
         }
         $tmppath = $tmppath->child($part);
-        my @children = $dir->list(dir_only=>1,name=>$part)->each;
+        my %param=(name=>$part);
+        if ($i<$#parts) {
+            $param{dir_only}=1;
+        }
+        my @children = $dir->list(%param)->each;
 
         $old_part=$part;
-        return unless @children;
+        return Mojo::Collection->new([]) unless @children;
 #        die Dumper $children;# if ! ref $children eq 'ARRAY';
 
         for my $child (@children) {
             say "Found child ", $child->metadata->{name} if $ENV{MOJO_DEBUG};
             if ( $child->metadata->{name} eq $part ) {
                 $parent_id = $child->metadata->{id};
-             #   push @return, $parent_id if $ENV{MOJO_DEBUG};
-                #say  "Parent: $parent_id";
+                push @return,$child->metadata;
                 next PART;
             }
         }
@@ -270,7 +245,7 @@ sub path_resolve($self) {
         return;
 
     }
-    die Dumper @return;
+    #die Dumper \@return;
 
     return Mojo::Collection->new(@return);
 }
@@ -310,9 +285,9 @@ sub list($self, %options) {
     delete $opts->{dir_only};
     delete $opts->{name};
 
-    my $url = Mojo::URL->new($self->api_file_url)->query($opts);
+    my $url = Mojo::URL->new($self->mgm->api_file_url)->query($opts);
 
-    my $data = $self->http_request('get',$url,'');
+    my $data = $self->mgm->http_request('get',$url,'');
 
     my @objects =  map {$self->{mgm}->file_from_metadata($_)} @{ $data->{files} };
     return Mojo::Collection->new(@objects);

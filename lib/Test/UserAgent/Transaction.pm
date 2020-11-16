@@ -17,20 +17,30 @@ Simulate Transaction object.
 
 =cut
 
-has 'config_file';
+has 'ua';
 
 =head1 METHODS
 
 
-=head2 body
+=head2 res
+
+    $tx->res
+
+Return response object.
 
 =cut
 
 sub res($self) {
-    return Test::UserAgent::Transaction::Response->new(config_file => $self->config_file);
+    shift @_;
+    return Test::UserAgent::Transaction::Response->new(ua => $self->ua);
 }
 
-=head2 code
+=head2 req
+
+    $tx->req
+
+Return request body.
+
 =cut
 
 sub req($self) {
