@@ -226,7 +226,7 @@ sub path_resolve($self) {
         my @children = $dir->list(%param)->each;
 
         $old_part=$part;
-        return Mojo::Collection->new([]) unless @children;
+        return Mojo::Collection->new() unless @children;
 #        die Dumper $children;# if ! ref $children eq 'ARRAY';
 
         for my $child (@children) {
@@ -261,7 +261,8 @@ Return Mojo::Collection of files if object is a directory. Else return empty.
 sub list($self, %options) {
     my $folder_id;
     my @return;
-    $folder_id = $self->metadata->{id} if exists $self->metadata->{id};
+    my $meta = $self->get_metadata;
+    $folder_id = $meta->{id} if exists $meta->{id};
     if (! $folder_id && $self->rfile->to_string) {
         $folder_id = $metadata_all{$self->rfile->to_string}->{parents}->[0] if exists $metadata_all{$self->rfile->to_string};
     }
