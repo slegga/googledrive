@@ -106,7 +106,7 @@ sub get_metadata($self) {
     }
     if (! ref $metadata || ! keys %$metadata) {
         my @pathobj;
-        @pathobj = $self->path_resolve()->each;
+        @pathobj = $self->path_resolve->map(sub{$_->metadata})->each;
 #        say STDERR Dumper \@pathobj;
         $metadata = $pathobj[$#pathobj] if @pathobj;# kunne vært get_metadata
     }
@@ -174,7 +174,7 @@ sub file_mime_type {
 
 =head2 path_resolve
 
-    @dirnfiles = $file->path_resolve;
+    $collectonoffiles = $file->path_resolve;
 
 Get File objects for each element in path include
 
@@ -246,7 +246,7 @@ sub path_resolve($self) {
 
     }
     #die Dumper \@return;
-
+     @return = map{ $self->{mgm}->file_from_metadata($_)} @return;
     return Mojo::Collection->new(@return);
 }
 

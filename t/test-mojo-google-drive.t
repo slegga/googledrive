@@ -30,4 +30,12 @@ my $root = $o->file('/');
 my @objects =  $root->list->map(sub{$_->metadata})->each;
 p @objects;
 is (@objects,1,'file found');
+
+my @pathfiles = $f->path_resolve->map(sub{$_->metadata->{id}})->each;
+is @pathfiles,2,'Number og objects';
+p @pathfiles;
+is_deeply (\@pathfiles,['/','/file.txt'],'resolve_path');
+$f->upload;
+is (path('t/remote/file.txt')->slurp,'local-file
+','Content uploaded');
 done_testing;

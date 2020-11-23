@@ -27,6 +27,7 @@ has 'method';
 has 'url';
 has 'header';
 has 'payload';
+has  'metadata';
 
 =head1 METHODS
 
@@ -64,7 +65,43 @@ sub get($self,$url,@) {
 
 =cut
 
-sub post($self,@) {
+sub post($self,$url,@) {
+    my %params=(method=>'post', config_file=>$self->config_file, url=>$url);
+    if  (ref $url) {
+        $url =$url->to_string;
+    }
+    shift @_;# remove self
+    shift @_;# remove url
+    my $param;
+    if (@_) {
+        for my $i(0 .. $#_) {
+            my $v= $_[$i];
+            if (ref $v eq 'HASH') {
+                if ($v->{Authorization}) {
+                    $v->{Authorization} = 'Bearer: X';
+                }
+                $params{header} = $v;
+            } elsif (!$v) {
+                ...;
+            } elsif ($v eq 'multipart') {
+              $param=$v;
+            } elsif (ref $v eq 'ARRAY') {
+                if ($param eq 'multipart') {
+                    $self->metadata($v->[0]);
+                    $self->payload($v->[1]);
+                    die if exists $v->[2];
+                } else {
+                    warn "$param  $v";
+                    ...;
+                }
+            } else {
+                die "Unkown $i  $v  ".ref $v;
+            }
+
+        }
+    }
+    $self->$_($params{$_}) for keys %params;
+
     return Test::UserAgent::Transaction->new( ua => $self );
 }
 

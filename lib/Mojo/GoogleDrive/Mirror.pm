@@ -79,7 +79,7 @@ sub file {
     }
     my %common = $self->get_common_hash;
     if ($pathfile eq '/') {
-        $opts->{metadata} => {id=>'root'};
+        $opts->{metadata} = {id=>'root'};
     }
     $opts->{$_}=$common{$_} for keys %common;
     return Mojo::GoogleDrive::Mirror::File->new(pathfile => $pathfile,%$opts);

@@ -3,7 +3,7 @@ package Test::UserAgent::Transaction::Response;
 use Mojo::Base -base,-strict,-signatures;
 use Carp::Always;
 use Data::Dumper;
-use Mojo::JSON qw/to_json/;
+use Mojo::JSON qw/to_json from_json/;
 use Mojo::Util qw /url_unescape/;
 use Mojo::File 'path';
 
@@ -98,7 +98,7 @@ sub body($self) {
             }
             if($crit{parents}) {
                 my $re = quotemeta($crit{parents});
-                if ($crit{parents} eq '/') {
+                if ($crit{parents} eq '/' || $crit{parents} eq 'root') {
                     $re= quotemeta(path($self->ua->real_remote_root)->to_string).'.';
                 }
                 $allfiles = $allfiles->grep(sub{ "$_"=~/$re/});
@@ -115,6 +115,24 @@ sub body($self) {
         } else {
             die "No value for key: ".$key;
         }
+    } elsif($self->ua->method eq 'post') {
+        # https://www.googleapis.com/upload/drive/v3/files/?uploadType=multipartmultipart#ARRAY(0x5576579c3f78)
+        if ( $self->ua->url =~ m|https:\/\/www.googleapis.com\/upload\/drive\/v3\/files\/\?uploadType=multipart|) {
+                                #https://www.googleapis.com/upload/drive/v3/files/?uploadType=multipart
+        #fields\=(.+)|) {
+            my $fileid = $self->ua->metadata->{id};
+            my $hash;
+            if (!$fileid) {
+                my $x= $self->ua->metadata;
+                my $json = $x->{content};
+                $hash = from_json($json);
+#                die Dumper $hash;
+            }
+            path($self->ua->real_remote_root)->child($hash->{id})->spurt($self->ua->payload->{content});
+            return to_json($self->ua->metadata);
+        }
+        say STDERR "UNKNOWN URL: ".$self->ua->url;
+        ...
     } else {
         die "Unkown method ". $self->ua->method;
     }
