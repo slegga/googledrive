@@ -4,7 +4,7 @@ use Mojo::UserAgent;
 use Mojo::File 'path';
 use Mojo::URL;
 use File::MMagic;
-use Mojo::JSON qw /encode_json decode_json/;
+use Mojo::JSON qw /encode_json decode_json true false/;
 use Data::Dumper;
 use Mojo::Collection;
 use Mojo::GoogleDrive::Mirror;
@@ -100,15 +100,35 @@ Look up cashed data, if not as google drive for an update.
 
 sub get_metadata($self) {
     my $metadata;
-    $metadata = $self->metadata if ($self->metadata);
+    $metadata = $self->metadata if ( ref $self->metadata);
     if (! ref $metadata || ! keys %$metadata) {
         $metadata = $metadata_all{$self->rfile->to_string};
     }
+    my @pathobj;
     if (! ref $metadata || ! keys %$metadata) {
-        my @pathobj;
+
         @pathobj = $self->path_resolve->map(sub{$_->metadata})->each;
 #        say STDERR Dumper \@pathobj;
         $metadata = $pathobj[$#pathobj] if @pathobj;# kunne vært get_metadata
+    }
+    if (! $metadata || ! keys %$metadata) {
+        # populate name from local_file
+        # try to lookup remote parents
+        # fill kind,mimeType,parents,trashed,modifiedTime,explicitlyTrashed
+        $metadata={
+            kind=>'drive#file',
+            mimeType=>$self->file_mime_type,
+            trashed=>false,
+            explicitlyTrashed=>false,
+        };
+        $metadata->{name} = path($self->rfile)->basename;
+        if (exists $pathobj[$#pathobj -1]) {
+            $metadata->{parents} = [$pathobj[$#pathobj -1]->{id}];
+        }
+        $metadata->{modifiedTime} = (stat( $self->{pathfile}))[9]; #convert to google timeformat
+        say scalar @pathobj." $#pathobj" ;
+        say $self->rfile;
+        say Dumper $metadata;
     }
     return $metadata;
 }
@@ -134,7 +154,10 @@ sub upload {
             $byte_size = length($local_file_content);
     }
     my $metadata = $self->get_metadata;
-    my $metapart = {'Content-Type' => 'application/json; charset=UTF-8', 'Content-Length'=>$byte_size, content => encode_json($metadata),};
+    my $metapl={name=>$metadata->{name}};
+    $metapl->{id} = $metadata->{id} if exists $metadata->{id} && $metadata->{id};
+    $metapl->{parents} = $metadata->{parents} if exists $metadata->{parents} && $metadata->{parents};
+    my $metapart = {'Content-Type' => 'application/json; charset=UTF-8', 'Content-Length'=>$byte_size, content => encode_json($metapl),};
     my $urlstring = Mojo::URL->new($self->mgm->api_upload_url)->query(uploadType=>'multipart')->to_string;
     say $urlstring;
     my $meta = $self->mgm->http_request('post',$urlstring, $main_header ,   multipart => [
@@ -159,8 +182,8 @@ Return mime type for the local file.
 
 =cut
 
-sub file_mime_type {
-    my ( $self, $file ) = @_;
+sub file_mime_type($self) {
+   # my ( $self ) = @_;
 
     # There don't seem to be great implementations of mimetype
     # detection on CPAN, so just use this one for now.
@@ -168,8 +191,10 @@ sub file_mime_type {
     if ( !$self->{magic} ) {
         $self->{magic} = File::MMagic->new();
     }
-
-    return $self->{magic}->checktype_filename($file);
+    my $file = $self->lfile;
+    my $filetype = $self->{magic}->checktype_filename("$file");
+    die "$filetype  $file" if $filetype =~/x-sys/;
+    return $filetype;
 }
 
 =head2 path_resolve
@@ -226,23 +251,26 @@ sub path_resolve($self) {
         my @children = $dir->list(%param)->each;
 
         $old_part=$part;
-        return Mojo::Collection->new() unless @children;
+        if (! @children) {
+            push @return,undef;
+            # return Mojo::Collection->new(@return) ;
+        } else {
 #        die Dumper $children;# if ! ref $children eq 'ARRAY';
 
-        for my $child (@children) {
-            say "Found child ", $child->metadata->{name} if $ENV{MOJO_DEBUG};
-            if ( $child->metadata->{name} eq $part ) {
-                $parent_id = $child->metadata->{id};
-                push @return,$child->metadata;
-                next PART;
+            for my $child (@children) {
+                say "Found child ", $child->metadata->{name} if $ENV{MOJO_DEBUG};
+                if ( $child->metadata->{name} eq $part ) {
+                    $parent_id = $child->metadata->{id};
+                    push @return,$child->metadata;
+                    next PART;
+                }
             }
         }
-
-        my $msg = "Child $part not found";
+#        my $msg = "Child $part not found";
 #        $self->error($msg);
 #        ERROR $msg;
-        die $msg;
-        return;
+#        die $msg;
+#        return;
 
     }
     #die Dumper \@return;

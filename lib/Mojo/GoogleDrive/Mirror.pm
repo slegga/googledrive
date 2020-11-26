@@ -8,7 +8,7 @@ use Mojo::GoogleDrive::Mirror::File;
 use Mojo::UserAgent;
 use Data::Dumper;
 use OAuth::Cmdline::GoogleDrive;
-use Mojo::JSON qw /decode_json/;
+use Mojo::JSON qw /decode_json encode_json/;
 =head1 NAME
 
 Mojo::GoogleDrive::Mirror
@@ -138,7 +138,7 @@ sub http_request($self, $method,$url,$header='',@) {
 #    say $main_header;
     my @extra = @_;
     splice @extra,0,4;
-    say $url. join('#', @extra);#, $main_header;
+    say $url. join('#', map {ref $_?encode_json($_):'$_'} @extra);#, $main_header;
     my $tx = $self->ua->$method($url, $main_header,@extra);
     my $code = $tx->res->code;
     if (!$code) {

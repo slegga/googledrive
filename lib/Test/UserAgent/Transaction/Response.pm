@@ -3,7 +3,7 @@ package Test::UserAgent::Transaction::Response;
 use Mojo::Base -base,-strict,-signatures;
 use Carp::Always;
 use Data::Dumper;
-use Mojo::JSON qw/to_json from_json/;
+use Mojo::JSON qw/to_json from_json true false/;
 use Mojo::Util qw /url_unescape/;
 use Mojo::File 'path';
 
@@ -141,7 +141,7 @@ sub body($self) {
 sub _metadata($self,$pathfile) {
     my $p = path($pathfile);
     my $f = path($self->ua->real_remote_root,$pathfile);
-    my $return={id=>"$pathfile"||'/',name => $p->basename||'/', parents=>[path($pathfile)->dirname->to_string||'/'],trashed=>0,explicitlyTrashed=>0, modifiedTime =>'2013-10-19T11:06:57.289Z'};
+    my $return={id=>"$pathfile"||'/',name => $p->basename||'/', parents=>[path($pathfile)->dirname->to_string||'/'],trashed=>false,explicitlyTrashed=>false, modifiedTime =>'2013-10-19T11:06:57.289Z'};
     if(-d "$f") {
         $return->{mimeType} = 'application/vnd.google-apps.folder';
     }
