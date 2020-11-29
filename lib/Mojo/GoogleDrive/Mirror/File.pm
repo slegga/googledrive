@@ -4,11 +4,12 @@ use Mojo::UserAgent;
 use Mojo::File 'path';
 use Mojo::URL;
 use File::MMagic;
-use Mojo::JSON qw /encode_json decode_json true false/;
+use Mojo::JSON qw /true false to_json from_json/;
 use Data::Dumper;
 use Mojo::Collection;
 use Mojo::GoogleDrive::Mirror;
-
+use open qw(:std :utf8);
+use utf8;
 =head1 NAME
 
 Mojo::GoogleDrive::Mirror::File - Google Drive file object
@@ -157,7 +158,7 @@ sub upload {
     my $metapl={name=>$metadata->{name}};
     $metapl->{id} = $metadata->{id} if exists $metadata->{id} && $metadata->{id};
     $metapl->{parents} = $metadata->{parents} if exists $metadata->{parents} && $metadata->{parents};
-    my $metapart = {'Content-Type' => 'application/json; charset=UTF-8', 'Content-Length'=>$byte_size, content => encode_json($metapl),};
+    my $metapart = {'Content-Type' => 'application/json; charset=UTF-8', 'Content-Length'=>$byte_size, content => to_json($metapl),};
     my $urlstring = Mojo::URL->new($self->mgm->api_upload_url)->query(uploadType=>'multipart')->to_string;
     say $urlstring;
     my $meta = $self->mgm->http_request('post',$urlstring, $main_header ,   multipart => [
@@ -248,6 +249,7 @@ sub path_resolve($self) {
         if ($i<$#parts) {
             $param{dir_only}=1;
         }
+
         my @children = $dir->list(%param)->each;
 
         $old_part=$part;
@@ -309,6 +311,8 @@ sub list($self, %options) {
     if ($options{name}) {
         $opts->{q} = q_and($opts->{q},"name = '$options{name}'");
     }
+
+    $opts->{q} = q_and($opts->{q},"trashed = false");
 
     my @children = ();
     delete $opts->{dir_only};
