@@ -61,7 +61,7 @@ Constant set to minimum meta data for a file.
 =cut
 
 sub INTERESTING_FIELDS {
-    return 'id,kind,name,mimeType,parents,modifiedTime,trashed,explicitlyTrashed';
+    return 'id,kind,name,mimeType,parents,modifiedTime,trashed,explicitlyTrashed,md5Checksum';
 }
 
 =head2 lfile
@@ -159,7 +159,7 @@ sub upload {
     $metapl->{id} = $metadata->{id} if exists $metadata->{id} && $metadata->{id};
     $metapl->{parents} = $metadata->{parents} if exists $metadata->{parents} && $metadata->{parents};
     my $metapart = {'Content-Type' => 'application/json; charset=UTF-8', 'Content-Length'=>$byte_size, content => to_json($metapl),};
-    my $urlstring = Mojo::URL->new($self->mgm->api_upload_url)->query(uploadType=>'multipart')->to_string;
+    my $urlstring = Mojo::URL->new($self->mgm->api_upload_url)->query(uploadType=>'multipart',fields=> INTERESTING_FIELDS)->to_string;
     say $urlstring;
     my $meta = $self->mgm->http_request('post',$urlstring, $main_header ,   multipart => [
     $metapart,

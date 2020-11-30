@@ -3,7 +3,7 @@ package Test::UserAgent::Transaction::Response;
 use Mojo::Base -base,-strict,-signatures;
 use Carp::Always;
 use Data::Dumper;
-use Mojo::JSON qw/to_json from_json true false/;
+use Mojo::JSON qw/encode_json to_json from_json true false/;
 use Mojo::Util qw /url_unescape/;
 use Mojo::File 'path';
 
@@ -65,7 +65,7 @@ sub body($self) {
             my ($file_id,$fields)=($1,$2);
             if ($file_id eq 'root') {
                 my $root = {id=>'/', kind=>"drive#file", name=>'Min disk', mimeType=>'application/vnd.google-apps.folder',trashed=>0,explicitlyTrashed=>0,modifiedTime=>'2013-10-19T11:06:57.289Z'};
-                return to_json($root);
+                return encode_json($root);
             #https://www.googleapis.com/drive/v3/files/?q=mimeType+%3D+%27application%2Fvnd.google-apps.folder%27+and+%27t%2Fremote%2F%27+in+parents+and+name+%3D+%27t%27
             } else {
                 die "No data for GET: $file_id:   $key";
@@ -129,7 +129,7 @@ sub body($self) {
 #                die Dumper $hash;
             }
             path($self->ua->real_remote_root)->child($hash->{id})->spurt($self->ua->payload->{content});
-            return to_json($self->ua->metadata);
+            return encode_json($self->ua->metadata);
         }
         say STDERR "UNKNOWN URL: ".$self->ua->url;
         ...
