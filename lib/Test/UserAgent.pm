@@ -6,6 +6,8 @@ use Mojo::JSON qw /to_json true false/;
 use Mojo::File qw/path/;
 use Mojo::Date;
 use File::MMagic;
+use Digest::MD5::File qw(file_md5_base64);
+
 
 
 =head1 NAME
@@ -174,10 +176,10 @@ sub get_metadata_from_file($self,$file) {
 
         $return->{mimeType} = $self->{magic}->checktype_filename("$file");
     }
-    
+
     my $mdate = Mojo::Date->new->epoch($file->stat->mtime);
     $return->{modifiedTime} = "$mdate";
-    $return->md5Checksum = 
+    $return->{md5Checksum} = file_md5_base64("$file");
     return $return;
 }
 =head2 AUTOLOAD
