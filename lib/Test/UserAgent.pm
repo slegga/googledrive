@@ -179,7 +179,7 @@ sub get_metadata_from_file($self,$file) {
 
     my $mdate = Mojo::Date->new->epoch($file->stat->mtime);
     $return->{modifiedTime} = "$mdate";
-    $return->{md5Checksum} = file_md5_base64("$file");
+    $return->{md5Checksum} = file_md5_base64("$file") if $return->{mimeType} ne 'application/vnd.google-apps.folder';
     return $return;
 }
 =head2 AUTOLOAD
