@@ -7,6 +7,7 @@ use Mojo::JSON qw/encode_json to_json from_json true false/;
 use Mojo::Util qw /url_unescape/;
 use Mojo::File 'path';
 
+
 has 'ua';  # Test::UserAgent ?
 has 'req_res';
 
@@ -127,9 +128,30 @@ sub body($self) {
                 my $json = $x->{content};
                 $hash = from_json($json);
 #                die Dumper $hash;
+            } else {
+                ...;
+            }
+            if (! $hash->{id}) {
+                $hash->{id} = $hash->{parents}->[0] .'/'. $hash->{name};
             }
             path($self->ua->real_remote_root)->child($hash->{id})->spurt($self->ua->payload->{content});
             return encode_json($self->ua->metadata);
+        }
+        if ( $self->ua->url =~ m|https:\/\/www\.googleapis\.com\/drive\/v3\/files\/\?fields\=id\%2Ckind\%2Cname\%2CmimeType\%2Cparents\%2CmodifiedTime\%2Ctrashed\%2CexplicitlyTrashed\%2Cmd5Checksum|) {
+            my $header = $self->ua->header;
+            my $metadata = $self->ua->metadata;
+            my $payload = $self->ua->payload;
+            if (! $metadata) {
+                warn Dumper $header,$payload;
+                die "Missing metadata";
+            }
+            my $parent = $metadata->{parents}->[0]//'root';
+            die "Missing name" .Dumper $metadata if !exists $metadata->{name} ||! $metadata->{name};
+            my $f = $self->ua->get_rmojofile_from_id($parent)->child($metadata->{name})->make_path;
+            #my $allfiles = path($self->ua->real_remote_root)->list_tree({dir=>1});
+
+            my $meta = $self->ua->get_metadata_from_file($f);
+            return encode_json($meta);
         }
         say STDERR "UNKNOWN URL: ".$self->ua->url;
         ...
@@ -141,10 +163,11 @@ sub body($self) {
 sub _metadata($self,$pathfile) {
     my $p = path($pathfile);
     my $f = path($self->ua->real_remote_root,$pathfile);
-    my $return={id=>"$pathfile"||'/',name => $p->basename||'/', parents=>[path($pathfile)->dirname->to_string||'/'],trashed=>false,explicitlyTrashed=>false, modifiedTime =>'2013-10-19T11:06:57.289Z'};
-    if(-d "$f") {
-        $return->{mimeType} = 'application/vnd.google-apps.folder';
-    }
+    my $return = $self->ua->get_metadata_from_file($f);
+#    my $return={id=>"$pathfile"||'/',name => $p->basename||'/', parents=>[path($pathfile)->dirname->to_string||'/'],trashed=>false,explicitlyTrashed=>false, modifiedTime =>'2013-10-19T11:06:57.289Z'};
+ #   if(-d "$f") {
+ #       $return->{mimeType} = 'application/vnd.google-apps.folder';
+ #   }
     return $return;
 }
 

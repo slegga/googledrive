@@ -2,7 +2,11 @@ package Test::UserAgent;
 use Mojo::Base -base, -signatures;
 use Data::Dumper;
 use Test::UserAgent::Transaction;
-use Mojo::JSON qw /to_json/;
+use Mojo::JSON qw /to_json true false/;
+use Mojo::File qw/path/;
+use Mojo::Date;
+use File::MMagic;
+
 
 =head1 NAME
 
@@ -28,6 +32,8 @@ has 'url';
 has 'header';
 has 'payload';
 has  'metadata';
+has 'magic';
+
 
 =head1 METHODS
 
@@ -76,7 +82,7 @@ sub post($self,$url,@) {
     if (@_) {
         for my $i(0 .. $#_) {
             my $v= $_[$i];
-            if (ref $v eq 'HASH') {
+            if (ref $v eq 'HASH' && $i == 0) {
                 if ($v->{Authorization}) {
                     $v->{Authorization} = 'Bearer: X';
                 }
@@ -91,11 +97,22 @@ sub post($self,$url,@) {
                     $self->payload($v->[1]);
                     die if exists $v->[2];
                 } else {
-                    warn "$param  $v";
+                    warn "$param  ".Dumper $v;
                     ...;
                 }
-            } else {
-                die "Unkown $i  $v  ".ref $v;
+            } elsif ($v eq 'json') {
+                $param=$v;
+            } elsif (ref $v eq 'HASH') {
+                if ($param eq 'json') {
+                    $self->metadata($v);
+                }
+                else {
+                    warn "$param   ".Dumper $v;
+                    ...;
+                }
+            }
+            else {
+                die "Unknown $i  $v  ".ref $v;
             }
 
         }
@@ -105,7 +122,64 @@ sub post($self,$url,@) {
     return Test::UserAgent::Transaction->new( ua => $self );
 }
 
+=head2 get_rmojofile_from_id
 
+    my $remote_root_file = $self->ua->get_rmojofile_from_id('root');
+
+Return Mojo::File object for remote file based on id.
+
+=cut
+
+sub get_rmojofile_from_id($self, $id) {
+    my $return;
+    if (! defined $id) {
+        return;
+    }
+    if($id eq 'root' || $id eq '' || $id eq '/') {
+        return Mojo::File->new($self->real_remote_root);
+    }
+    else {
+        return Mojo::File->new($self->real_remote_root)->child($id);
+    }
+    #$return->{id} = ...;#$self->rfile->to_string;
+    #$meta->parents=[ path($self->rfile)->dirname->to_string ];
+    ...;
+}
+
+=head2 get_metadata_from_file
+
+Return metadata based on Mojo::File object
+
+=cut
+
+sub get_metadata_from_file($self,$file) {
+    my $return;
+    my $pathfile = substr($file->to_string,length($self->real_remote_root));
+#id%2Ckind%2Cname%2CmimeType%2Cparents%2CmodifiedTime%2Ctrashed%2CexplicitlyTrashed%2Cmd5Checksum$_
+    $return->{id} = $pathfile;
+    $return->{kind} = 'drive#file';
+    $return->{name} = $file->basename;
+    $return->{parents} = [path($pathfile)->dirname->to_string];
+    $return->{trashed} = false;
+    $return->{explicitlyTrashed} = false;
+    if (-d "$file") {
+        $return->{mimeType} = 'application/vnd.google-apps.folder';
+    } else {
+        # There don't seem to be great implementations of mimetype
+        # detection on CPAN, so just use this one for now.
+
+        if ( !$self->{magic} ) {
+            $self->{magic} = File::MMagic->new();
+        }
+
+        $return->{mimeType} = $self->{magic}->checktype_filename("$file");
+    }
+    
+    my $mdate = Mojo::Date->new->epoch($file->stat->mtime);
+    $return->{modifiedTime} = "$mdate";
+    $return->md5Checksum = 
+    return $return;
+}
 =head2 AUTOLOAD
 
 =cut

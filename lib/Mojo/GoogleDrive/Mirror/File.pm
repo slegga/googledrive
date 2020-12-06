@@ -155,10 +155,29 @@ sub upload {
             $byte_size = length($local_file_content);
     }
     my $metadata = $self->get_metadata;
-    my $metapl={name=>$metadata->{name}};
-    $metapl->{id} = $metadata->{id} if exists $metadata->{id} && $metadata->{id};
-    $metapl->{parents} = $metadata->{parents} if exists $metadata->{parents} && $metadata->{parents};
-    my $metapart = {'Content-Type' => 'application/json; charset=UTF-8', 'Content-Length'=>$byte_size, content => to_json($metapl),};
+    my $mcontent={name=>$metadata->{name}};
+    $mcontent->{id} = $metadata->{id} if exists $metadata->{id} && $metadata->{id};
+    $mcontent->{parents} = $metadata->{parents} if exists $metadata->{parents} && $metadata->{parents};
+
+    # create missing folders if not exists
+    if (exists $mcontent->{parents}->[0] && ! defined $mcontent->{parents}->[0]) {
+        my $path_string = path($self->pathfile)->dirname->to_string;
+        my $rpath = $self->{mgm}->file($path_string);
+        $rpath->make_path;
+        $mcontent->{parents}->[0] = $rpath->metadata->{id};
+        my $x = $rpath->metadata;
+        if (! $x->{id}) {
+            say STDERR Dumper $x ;
+            die '$x->{id} is missing';
+        }
+    } elsif (exists $mcontent->{parents}->[0]) {
+        # root
+#        ...;
+    } else {
+        die "Should never come here";
+    }
+
+    my $metapart = {'Content-Type' => 'application/json; charset=UTF-8', 'Content-Length'=>$byte_size, content => to_json($mcontent),};
     my $urlstring = Mojo::URL->new($self->mgm->api_upload_url)->query(uploadType=>'multipart',fields=> INTERESTING_FIELDS)->to_string;
     say $urlstring;
     my $meta = $self->mgm->http_request('post',$urlstring, $main_header ,   multipart => [
@@ -301,7 +320,7 @@ sub list($self, %options) {
         return;
     }
     my    $opts= \%options;
-    $opts->{q}='';
+    $opts->{q} = '' ;
     if ($options{dir_only}) {
         $opts->{q} = q_and($opts->{q},"mimeType = 'application/vnd.google-apps.folder'");
     }
@@ -325,6 +344,48 @@ sub list($self, %options) {
     my @objects =  map {$self->{mgm}->file_from_metadata($_)} @{ $data->{files} };
     return Mojo::Collection->new(@objects);
 }
+
+=head2 make_path
+
+    $file->make_path
+
+Make remote path if not exists.
+
+=cut
+
+sub make_path($self) {
+    # pathfile to array
+    warn $self->rfile->to_string;
+    my @pathparts = @{ path($self->rfile)->to_array};
+    # path_resolve
+    my @pathobjs = $self->path_resolve->each;
+#    shift @pathparts;
+    die "Uneven parts:".Dumper \@pathparts,\@pathobjs if @pathparts != @pathobjs;
+    my $main_header = {$self->{oauth}->authorization_headers()};
+    my $parent='root';
+    for my $i(0 .. $#pathobjs) {
+        if (exists  $pathobjs[$i]->{id} && $pathobjs[$i]->{id}) {
+            $parent = $pathobjs[$i]->{id};
+            next ;
+        }
+        next if ! $pathparts[$i] && $i == 0;
+        die Dumper $pathobjs[$i], \@pathparts,$i if ! $pathobjs[$i];
+        my$mcontent = { name => $pathparts[$i],mimeType=> 'application/vnd.google-apps.folder',parents=>[$parent] };
+        # make dir
+        my $metapart = {'Content-Type' => 'application/json; charset=UTF-8', content => to_json($mcontent),};
+        my $urlstring = Mojo::URL->new($self->mgm->api_file_url)->query(fields=> INTERESTING_FIELDS)->to_string;
+        say $urlstring;
+        my $meta = $self->mgm->http_request('post',$urlstring, $main_header ,
+        json=>$mcontent);
+        $pathobjs[$i] =$self->mgm->file_from_metadata($meta);
+        $metadata_all{$self->rfile->to_string} = $meta;
+        $parent = $meta->{id};
+        $self->metadata($meta); # the last item will have the meta data
+    }
+    return $self;
+}
+
+# NON SELF UTILITY SUBS
 
 =head2 q_and
 
