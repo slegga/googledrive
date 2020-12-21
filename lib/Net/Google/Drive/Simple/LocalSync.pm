@@ -685,6 +685,12 @@ sub _handle_sync{
         $self->net_google_drive_simple->download( $remote_file, $tmpfile );
         if (-s $tmpfile) {
 			if ( ! -d _string2perlenc($local_file->dirname->to_string) ) {
+			    my $dir = _string2perlenc($local_file->dirname->to_string);
+			    if (-f $dir ) {
+			        my $cmd ="rm $dir";
+			        warn $cmd;
+			        `$cmd`; #remove file if it is in the way for the directory
+			    }
 				$local_file->dirname->make_path;
 			}
 			my $x = $loc_pathname;
