@@ -1,5 +1,7 @@
 #!/usr/bin/env perl
 
+die "Deprecated. Use mojo-googledrive instead.";
+
 use Mojo::File 'path';
 
 my $lib;

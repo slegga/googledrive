@@ -1,4 +1,7 @@
 #!/usr/bin/env perl
+
+die "Deprecated. Use mojo-googledrive instead.";
+
 use lib '.';
 use Mojo::Base -strict;
 use FindBin;
