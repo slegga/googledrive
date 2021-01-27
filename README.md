@@ -1,5 +1,5 @@
 # googledrive
-Under construction. 
+Deprecated!! See mojo-googledrive istead 
 -------------------
 Sync local files with google drive with a perl script. GoSync did not work for me.
 
